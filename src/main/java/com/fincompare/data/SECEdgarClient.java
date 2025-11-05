@@ -6,6 +6,7 @@ import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.http.ParseException;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +35,7 @@ public class SECEdgarClient {
     /**
      * Lookup CIK (Central Index Key) from ticker symbol
      */
-    public String getCIKFromTicker(String ticker) throws IOException {
+    public String getCIKFromTicker(String ticker) throws IOException, ParseException {
         logger.info("Looking up CIK for ticker: {}", ticker);
 
         HttpGet request = new HttpGet(SEC_COMPANY_TICKERS_URL);
@@ -65,7 +66,7 @@ public class SECEdgarClient {
     /**
      * Fetch 10-K filings for a company
      */
-    public List<SECFilingMetadata> get10KFilings(String cik, int maxFilings) throws IOException {
+    public List<SECFilingMetadata> get10KFilings(String cik, int maxFilings) throws IOException, ParseException {
         logger.info("Fetching 10-K filings for CIK: {}", cik);
 
         String url = String.format("%s/submissions/CIK%s.json", SEC_BASE_URL, cik);
@@ -134,7 +135,7 @@ public class SECEdgarClient {
     /**
      * Download XBRL filing document
      */
-    public String downloadFiling(String url) throws IOException {
+    public String downloadFiling(String url) throws IOException, ParseException {
         logger.info("Downloading filing from: {}", url);
 
         HttpGet request = new HttpGet(url);
@@ -170,7 +171,7 @@ public class SECEdgarClient {
     /**
      * Fetch financial data API endpoint (Company Concept)
      */
-    public String fetchCompanyConcept(String cik, String taxonomy, String tag) throws IOException {
+    public String fetchCompanyConcept(String cik, String taxonomy, String tag) throws IOException, ParseException {
         String url = String.format("%s/api/xbrl/companyconcept/CIK%s/%s/%s.json",
                 SEC_BASE_URL, cik, taxonomy, tag);
 
@@ -194,7 +195,7 @@ public class SECEdgarClient {
     /**
      * Fetch company facts (all financial data)
      */
-    public String fetchCompanyFacts(String cik) throws IOException {
+    public String fetchCompanyFacts(String cik) throws IOException, ParseException {
         String url = String.format("%s/api/xbrl/companyfacts/CIK%s.json", SEC_BASE_URL, cik);
 
         logger.info("Fetching company facts for CIK: {}", cik);
