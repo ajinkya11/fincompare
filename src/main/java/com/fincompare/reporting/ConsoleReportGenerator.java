@@ -50,9 +50,22 @@ public class ConsoleReportGenerator {
         YearlyFinancialData c1Data = analysis.getCompany1().getLatestYearData();
         YearlyFinancialData c2Data = analysis.getCompany2().getLatestYearData();
 
-        // Print table header
+        // Check if fiscal years match and warn if not
+        if (c1Data != null && c2Data != null &&
+            !c1Data.getFiscalYear().equals(c2Data.getFiscalYear())) {
+            System.out.println(ansi().fg(Ansi.Color.YELLOW).bold()
+                    .a("⚠ WARNING: Comparing different fiscal years - ")
+                    .a(c1Name + ": " + c1Data.getFiscalYear() + ", ")
+                    .a(c2Name + ": " + c2Data.getFiscalYear())
+                    .reset());
+            System.out.println();
+        }
+
+        // Print table header with fiscal years
+        String header1 = c1Name + (c1Data != null ? " (FY" + c1Data.getFiscalYear() + ")" : "");
+        String header2 = c2Name + (c2Data != null ? " (FY" + c2Data.getFiscalYear() + ")" : "");
         System.out.println(String.format("%-" + LABEL_WIDTH + "s | %" + VALUE_WIDTH + "s | %" + VALUE_WIDTH + "s",
-                "Metric", c1Name, c2Name));
+                "Metric", header1, header2));
         System.out.println(repeat("-", LABEL_WIDTH + VALUE_WIDTH * 2 + 6));
 
         if (c1Data != null && c2Data != null) {
@@ -125,9 +138,11 @@ public class ConsoleReportGenerator {
             AirlineOperationalData op2 = c2Data.getOperationalData();
 
             if (op1 != null && op2 != null) {
-                // Print table header
+                // Print table header with fiscal years
+                String header1 = c1Name + " (FY" + c1Data.getFiscalYear() + ")";
+                String header2 = c2Name + " (FY" + c2Data.getFiscalYear() + ")";
                 System.out.println(String.format("%-" + LABEL_WIDTH + "s | %" + VALUE_WIDTH + "s | %" + VALUE_WIDTH + "s",
-                        "Metric", c1Name, c2Name));
+                        "Metric", header1, header2));
                 System.out.println(repeat("-", LABEL_WIDTH + VALUE_WIDTH * 2 + 6));
 
                 printOperationalRow("Available Seat Miles (M)", op1, op2,

@@ -139,7 +139,7 @@ public class XBRLParser {
     private Set<String> extractFiscalYears(JsonNode usGaap, int maxYears) {
         Set<String> years = new TreeSet<>(Collections.reverseOrder());
 
-        // Look at revenue data to find available years
+        // Look at multiple revenue tags to find all available years
         List<String> revenueTags = XBRL_TAGS.get("revenue");
         for (String tag : revenueTags) {
             if (usGaap.has(tag)) {
@@ -148,15 +148,25 @@ public class XBRLParser {
                     for (JsonNode entry : units.get("USD")) {
                         String fy = entry.path("fy").asText();
                         String form = entry.path("form").asText();
-                        // Only include 10-K filings (annual reports)
-                        if (!fy.isEmpty() && "10-K".equals(form)) {
+                        String frame = entry.path("frame").asText();
+
+                        // Only include 10-K filings (annual reports) with full year data (CY suffix)
+                        if (!fy.isEmpty() && "10-K".equals(form) && frame.contains("CY")) {
                             years.add(fy);
+                            logger.debug("Found fiscal year {} for form 10-K", fy);
                         }
                     }
                 }
-                break;
+
+                // If we found years from this tag, use them
+                if (!years.isEmpty()) {
+                    break;
+                }
             }
         }
+
+        // Log available years
+        logger.info("Available fiscal years with 10-K data: {}", years);
 
         // Return only the requested number of most recent years
         Set<String> result = new TreeSet<>(Collections.reverseOrder());
@@ -167,6 +177,7 @@ public class XBRLParser {
             count++;
         }
 
+        logger.info("Selected fiscal years for analysis: {}", result);
         return result;
     }
 
@@ -240,13 +251,32 @@ public class XBRLParser {
         cf.setInvestingCashFlow(extractValue(usGaap, XBRL_TAGS.get("investingCashFlow"), fiscalYear));
         cf.setFinancingCashFlow(extractValue(usGaap, XBRL_TAGS.get("financingCashFlow"), fiscalYear));
 
-        cf.setCapitalExpenditures(extractValue(usGaap, Arrays.asList("PaymentsToAcquirePropertyPlantAndEquipment"), fiscalYear));
-        cf.setDepreciationAmortization(extractValue(usGaap, Arrays.asList("DepreciationDepletionAndAmortization"), fiscalYear));
+        cf.setCapitalExpenditures(extractValue(usGaap,
+                Arrays.asList("PaymentsToAcquirePropertyPlantAndEquipment",
+                            "PaymentsForCapitalImprovements",
+                            "CapitalExpenditureIncurredButNotYetPaid"), fiscalYear));
+        cf.setDepreciationAmortization(extractValue(usGaap,
+                Arrays.asList("DepreciationDepletionAndAmortization",
+                            "Depreciation",
+                            "DepreciationAndAmortization"), fiscalYear));
+
+        // Additional cash flow components
+        cf.setNetIncome(extractValue(usGaap, XBRL_TAGS.get("netIncome"), fiscalYear));
+        cf.setDebtIssuance(extractValue(usGaap,
+                Arrays.asList("ProceedsFromIssuanceOfLongTermDebt",
+                            "ProceedsFromDebtNetOfIssuanceCosts"), fiscalYear));
+        cf.setDebtRepayment(extractValue(usGaap,
+                Arrays.asList("RepaymentsOfLongTermDebt",
+                            "RepaymentsOfDebt"), fiscalYear));
 
         // Calculate free cash flow
         if (cf.getOperatingCashFlow() != null && cf.getCapitalExpenditures() != null) {
             cf.setFreeCashFlow(cf.getOperatingCashFlow().subtract(cf.getCapitalExpenditures().abs()));
         }
+
+        logger.debug("Cash flow data - Operating: {}, Investing: {}, Financing: {}, CapEx: {}, FCF: {}",
+                cf.getOperatingCashFlow(), cf.getInvestingCashFlow(), cf.getFinancingCashFlow(),
+                cf.getCapitalExpenditures(), cf.getFreeCashFlow());
 
         return cf;
     }
@@ -258,19 +288,39 @@ public class XBRLParser {
         AirlineOperationalData data = new AirlineOperationalData();
         data.setFiscalYear(fiscalYear);
 
+        logger.debug("Parsing operational data for fiscal year: {}", fiscalYear);
+        logger.debug("Available taxonomies: {}", String.join(", ",
+            facts.fieldNames().hasNext() ? iteratorToList(facts.fieldNames()) : Arrays.asList("none")));
+
         // Check for custom taxonomy (airline-specific metrics)
         for (Iterator<String> it = facts.fieldNames(); it.hasNext(); ) {
             String taxonomy = it.next();
             if (!taxonomy.equals("us-gaap") && !taxonomy.equals("dei")) {
+                logger.info("Found custom taxonomy: {}", taxonomy);
                 JsonNode customFacts = facts.get(taxonomy);
 
-                // Look for airline-specific operational metrics
+                // Log available fields in custom taxonomy
+                if (customFacts.fieldNames().hasNext()) {
+                    logger.debug("Custom taxonomy fields: {}", String.join(", ",
+                        iteratorToList(customFacts.fieldNames())));
+                }
+
+                // Look for airline-specific operational metrics with various naming conventions
                 data.setAvailableSeatMiles(extractValue(customFacts,
-                        Arrays.asList("AvailableSeatMiles", "ASM"), fiscalYear));
+                        Arrays.asList("AvailableSeatMiles", "ASM", "AvailableSeatMilesASM",
+                                    "ScheduledAvailableSeatMiles"), fiscalYear));
                 data.setRevenuePassengerMiles(extractValue(customFacts,
-                        Arrays.asList("RevenuePassengerMiles", "RPM"), fiscalYear));
+                        Arrays.asList("RevenuePassengerMiles", "RPM", "RevenuePassengerMilesRPM",
+                                    "ScheduledRevenuePassengerMiles"), fiscalYear));
                 data.setPassengersCarried(extractLongValue(customFacts,
-                        Arrays.asList("PassengersCarried", "NumberOfPassengers"), fiscalYear));
+                        Arrays.asList("PassengersCarried", "NumberOfPassengers", "PassengersBoarded",
+                                    "ScheduledPassengers"), fiscalYear));
+                data.setCargoTonMiles(extractValue(customFacts,
+                        Arrays.asList("CargoTonMiles", "FreightTonMiles"), fiscalYear));
+                data.setAvailableTonMiles(extractValue(customFacts,
+                        Arrays.asList("AvailableTonMiles", "ATM"), fiscalYear));
+                data.setFleetSize(extractIntValue(customFacts,
+                        Arrays.asList("NumberOfAircraft", "FleetCount", "AircraftInService"), fiscalYear));
             }
         }
 
@@ -278,7 +328,23 @@ public class XBRLParser {
         JsonNode usGaap = facts.path("us-gaap");
         data.setFullTimeEmployees(extractIntValue(usGaap, Arrays.asList("NumberOfEmployees"), fiscalYear));
 
+        // Log what we found
+        logger.info("Operational data extracted - ASM: {}, RPM: {}, Passengers: {}, Employees: {}",
+                data.getAvailableSeatMiles(), data.getRevenuePassengerMiles(),
+                data.getPassengersCarried(), data.getFullTimeEmployees());
+
         return data;
+    }
+
+    /**
+     * Helper method to convert Iterator to List for logging
+     */
+    private List<String> iteratorToList(Iterator<String> iterator) {
+        List<String> list = new ArrayList<>();
+        while (iterator.hasNext()) {
+            list.add(iterator.next());
+        }
+        return list;
     }
 
     /**
@@ -331,17 +397,26 @@ public class XBRLParser {
      * Find value for a specific fiscal year from an array of data points
      */
     private BigDecimal findValueForFiscalYear(JsonNode dataPoints, String fiscalYear) {
+        BigDecimal annualValue = null;
+
         for (JsonNode point : dataPoints) {
             String fy = point.path("fy").asText();
             String form = point.path("form").asText();
+            String frame = point.path("frame").asText();
 
-            // Match fiscal year and prefer 10-K filings
+            // Match fiscal year and prefer 10-K filings with full year data (CY)
             if (fiscalYear.equals(fy) && "10-K".equals(form)) {
                 if (point.has("val")) {
-                    return new BigDecimal(point.get("val").asText());
+                    // Prefer CY (Calendar Year) frames for annual data
+                    if (frame.contains("CY")) {
+                        return new BigDecimal(point.get("val").asText());
+                    } else if (annualValue == null) {
+                        // Fallback to any 10-K data for this year
+                        annualValue = new BigDecimal(point.get("val").asText());
+                    }
                 }
             }
         }
-        return null;
+        return annualValue;
     }
 }
