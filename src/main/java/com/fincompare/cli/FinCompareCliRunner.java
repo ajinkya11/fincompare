@@ -10,19 +10,17 @@ import picocli.CommandLine.IFactory;
 public class FinCompareCliRunner implements CommandLineRunner, ExitCodeGenerator {
 
     private final IFactory factory;
-    private final CompareCommand compareCommand;
+    private final MainCommand mainCommand;
     private int exitCode;
 
-    public FinCompareCliRunner(IFactory factory, CompareCommand compareCommand) {
+    public FinCompareCliRunner(IFactory factory, MainCommand mainCommand) {
         this.factory = factory;
-        this.compareCommand = compareCommand;
+        this.mainCommand = mainCommand;
     }
 
     @Override
     public void run(String... args) throws Exception {
-        CommandLine commandLine = new CommandLine(compareCommand, factory);
-
-        commandLine.setCommandName("fincompare");
+        CommandLine commandLine = new CommandLine(mainCommand, factory);
 
         exitCode = commandLine.execute(args);
     }
