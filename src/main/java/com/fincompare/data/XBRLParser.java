@@ -138,6 +138,7 @@ public class XBRLParser {
      */
     private Set<String> extractFiscalYears(JsonNode usGaap, int maxYears) {
         Set<String> years = new TreeSet<>(Collections.reverseOrder());
+        Set<String> allYears = new TreeSet<>(Collections.reverseOrder());
 
         // Look at multiple revenue tags to find all available years
         List<String> revenueTags = XBRL_TAGS.get("revenue");
@@ -149,20 +150,32 @@ public class XBRLParser {
                         String fy = entry.path("fy").asText();
                         String form = entry.path("form").asText();
                         String frame = entry.path("frame").asText();
+                        String fp = entry.path("fp").asText();
 
-                        // Only include 10-K filings (annual reports) with full year data (CY suffix)
-                        if (!fy.isEmpty() && "10-K".equals(form) && frame.contains("CY")) {
-                            years.add(fy);
-                            logger.debug("Found fiscal year {} for form 10-K", fy);
+                        // Collect all 10-K years as fallback
+                        if (!fy.isEmpty() && "10-K".equals(form)) {
+                            allYears.add(fy);
+
+                            // Prefer full-year data: either CY frames, FY fiscal period, or Q4 data
+                            if (frame.contains("CY") || "FY".equals(fp) || frame.isEmpty()) {
+                                years.add(fy);
+                                logger.debug("Found fiscal year {} for form 10-K (frame: {}, fp: {})", fy, frame, fp);
+                            }
                         }
                     }
                 }
 
                 // If we found years from this tag, use them
-                if (!years.isEmpty()) {
+                if (!years.isEmpty() || !allYears.isEmpty()) {
                     break;
                 }
             }
+        }
+
+        // If no years found with strict filtering, use all 10-K years
+        if (years.isEmpty() && !allYears.isEmpty()) {
+            logger.warn("No fiscal years found with CY/FY filter, using all 10-K filings: {}", allYears);
+            years = allYears;
         }
 
         // Log available years
@@ -403,12 +416,13 @@ public class XBRLParser {
             String fy = point.path("fy").asText();
             String form = point.path("form").asText();
             String frame = point.path("frame").asText();
+            String fp = point.path("fp").asText();
 
-            // Match fiscal year and prefer 10-K filings with full year data (CY)
+            // Match fiscal year and prefer 10-K filings with full year data
             if (fiscalYear.equals(fy) && "10-K".equals(form)) {
                 if (point.has("val")) {
-                    // Prefer CY (Calendar Year) frames for annual data
-                    if (frame.contains("CY")) {
+                    // Prefer CY (Calendar Year) frames or FY (Fiscal Year) period for annual data
+                    if (frame.contains("CY") || "FY".equals(fp)) {
                         return new BigDecimal(point.get("val").asText());
                     } else if (annualValue == null) {
                         // Fallback to any 10-K data for this year
