@@ -7,6 +7,7 @@ import com.fincompare.metrics.FinancialMetricsCalculator;
 import com.fincompare.models.CompanyFinancialData;
 import com.fincompare.models.YearlyFinancialData;
 import com.fincompare.util.FileCache;
+import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -38,7 +39,7 @@ public class FinancialAnalysisService {
     /**
      * Fetch and analyze financial data for a company
      */
-    public CompanyFinancialData analyzeCompany(String ticker, int years) throws IOException {
+    public CompanyFinancialData analyzeCompany(String ticker, int years) throws IOException, ParseException {
         logger.info("Analyzing company: {} for {} years", ticker, years);
 
         // Look up CIK
