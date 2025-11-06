@@ -1,6 +1,7 @@
 package com.fincompare.data;
 
 import com.fincompare.models.AirlineOperationalData;
+import com.fincompare.models.IncomeStatement;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -10,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -52,6 +55,36 @@ public class OperationalMetricsParser {
             Pattern.compile("(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*(million|thousand)?\\s+passengers", Pattern.CASE_INSENSITIVE)
     };
 
+    // Cargo Ton Miles patterns
+    private static final Pattern[] CTM_PATTERNS = {
+            Pattern.compile("(?:cargo\\s+ton\\s+miles|CTMs?|freight\\s+ton\\s+miles)\\s*(?:\\(millions?\\))?[\\s:]*[\\-–—]*\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\s*(million|billion)?", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(?:CTMs?|cargo\\s+ton\\s+miles)[^\\d]{0,50}(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d{3,})", Pattern.CASE_INSENSITIVE)
+    };
+
+    // Available Ton Miles patterns
+    private static final Pattern[] ATM_PATTERNS = {
+            Pattern.compile("(?:available\\s+ton\\s+miles|ATMs?)\\s*(?:\\(millions?\\))?[\\s:]*[\\-–—]*\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\s*(million|billion)?", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(?:ATMs?|available\\s+ton\\s+miles)[^\\d]{0,50}(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d{3,})", Pattern.CASE_INSENSITIVE)
+    };
+
+    // Departures patterns
+    private static final Pattern[] DEPARTURES_PATTERNS = {
+            Pattern.compile("(?:departures|flights\\s+operated).*?(\\d{1,3}(?:,\\d{3})+)", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(\\d{1,3}(?:,\\d{3})+)\\s+(?:departures|flights)", Pattern.CASE_INSENSITIVE)
+    };
+
+    // Block Hours patterns
+    private static final Pattern[] BLOCK_HOURS_PATTERNS = {
+            Pattern.compile("block\\s+hours.*?(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\s*(million|thousand)?", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\s*(million|thousand)?\\s+block\\s+hours", Pattern.CASE_INSENSITIVE)
+    };
+
+    // Cargo Load Factor patterns
+    private static final Pattern[] CARGO_LOAD_FACTOR_PATTERNS = {
+            Pattern.compile("cargo\\s+load\\s+factor.*?(\\d{1,3}\\.\\d{1,2})\\s*%", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("freight\\s+load\\s+factor.*?(\\d{1,3}\\.\\d{1,2})\\s*%", Pattern.CASE_INSENSITIVE)
+    };
+
     /**
      * Parse operational metrics from 10-K HTML content
      */
@@ -67,37 +100,65 @@ public class OperationalMetricsParser {
             // Strategy 1: Look for operational statistics tables
             BigDecimal asm = extractFromTables(doc, "ASM", fiscalYear);
             BigDecimal rpm = extractFromTables(doc, "RPM", fiscalYear);
-            BigDecimal loadFactor = extractLoadFactorFromTables(doc);
+            BigDecimal ctm = extractFromTables(doc, "CTM", fiscalYear);
+            BigDecimal atm = extractFromTables(doc, "ATM", fiscalYear);
+            BigDecimal loadFactor = extractLoadFactorFromTables(doc, fiscalYear);
+            BigDecimal cargoLoadFactor = extractCargoLoadFactorFromTables(doc, fiscalYear);
+            BigDecimal departures = extractDeparturesFromTables(doc, fiscalYear);
+            BigDecimal blockHours = extractBlockHoursFromTables(doc, fiscalYear);
             Long passengers = extractPassengersFromTables(doc);
 
             // Strategy 2: Fallback to text extraction if table extraction failed
-            if (asm == null || rpm == null) {
-                logger.info("Table extraction incomplete, falling back to text pattern matching");
-                String fullText = doc.body().text();
-
-                if (asm == null) {
-                    asm = extractMetric(fullText, ASM_PATTERNS, "ASM");
-                }
-                if (rpm == null) {
-                    rpm = extractMetric(fullText, RPM_PATTERNS, "RPM");
-                }
-                if (loadFactor == null) {
-                    loadFactor = extractLoadFactor(fullText);
-                }
-                if (passengers == null) {
-                    passengers = extractPassengers(fullText);
-                }
+            String fullText = doc.body().text();
+            if (asm == null) {
+                asm = extractMetric(fullText, ASM_PATTERNS, "ASM");
+            }
+            if (rpm == null) {
+                rpm = extractMetric(fullText, RPM_PATTERNS, "RPM");
+            }
+            if (ctm == null) {
+                ctm = extractMetric(fullText, CTM_PATTERNS, "CTM");
+            }
+            if (atm == null) {
+                atm = extractMetric(fullText, ATM_PATTERNS, "ATM");
+            }
+            if (loadFactor == null) {
+                loadFactor = extractLoadFactor(fullText);
+            }
+            if (cargoLoadFactor == null) {
+                cargoLoadFactor = extractCargoLoadFactor(fullText);
+            }
+            if (departures == null) {
+                departures = extractDepartures(fullText);
+            }
+            if (blockHours == null) {
+                blockHours = extractBlockHours(fullText);
+            }
+            if (passengers == null) {
+                passengers = extractPassengers(fullText);
             }
 
+            // Set basic operational metrics
             data.setAvailableSeatMiles(asm);
             data.setRevenuePassengerMiles(rpm);
+            data.setCargoTonMiles(ctm);
+            data.setAvailableTonMiles(atm);
             data.setLoadFactor(loadFactor);
+            data.setCargoLoadFactor(cargoLoadFactor);
+            data.setDeparturesPerformed(departures);
+            data.setBlockHours(blockHours);
             data.setPassengersCarried(passengers);
 
+            // Extract fleet information
+            extractFleetInformation(doc, data);
+
             // Log what we found
-            logger.info("Extracted metrics - ASM: {}, RPM: {}, Load Factor: {}, Passengers: {}",
+            logger.info("Extracted metrics - ASM: {}, RPM: {}, CTM: {}, ATM: {}, Load Factor: {}, Cargo LF: {}, Departures: {}, Block Hours: {}, Passengers: {}",
                     data.getAvailableSeatMiles(), data.getRevenuePassengerMiles(),
-                    data.getLoadFactor(), data.getPassengersCarried());
+                    data.getCargoTonMiles(), data.getAvailableTonMiles(),
+                    data.getLoadFactor(), data.getCargoLoadFactor(),
+                    data.getDeparturesPerformed(), data.getBlockHours(),
+                    data.getPassengersCarried());
 
             return data;
 
@@ -105,6 +166,115 @@ public class OperationalMetricsParser {
             logger.error("Error parsing operational metrics", e);
             return data;
         }
+    }
+
+    /**
+     * Extract revenue breakdowns from 10-K HTML (passenger, cargo, other)
+     */
+    public Map<String, BigDecimal> extractRevenueBreakdowns(String htmlContent, String fiscalYear) {
+        logger.info("Extracting revenue breakdowns from 10-K HTML for fiscal year: {}", fiscalYear);
+
+        Map<String, BigDecimal> revenueBreakdowns = new HashMap<>();
+
+        try {
+            Document doc = Jsoup.parse(htmlContent);
+            Elements tables = doc.select("table");
+
+            // Search for Revenue breakdown tables (typically in Segment or Revenue note sections)
+            for (Element table : tables) {
+                String tableText = table.text().toLowerCase();
+
+                // Look for revenue breakdown indicators
+                if (!tableText.contains("revenue") && !tableText.contains("operating income")) {
+                    continue;
+                }
+
+                // Skip tables that are clearly not revenue breakdowns
+                if (tableText.contains("balance sheet") || tableText.contains("cash flow")) {
+                    continue;
+                }
+
+                Elements rows = table.select("tr");
+                for (Element row : rows) {
+                    String rowText = row.text().toLowerCase();
+
+                    // Look for passenger revenue
+                    if ((rowText.contains("passenger revenue") || rowText.contains("passenger") && rowText.contains("revenue")) &&
+                        !rowText.contains("per ") && !rowText.contains("yield")) {
+
+                        BigDecimal passengerRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
+                        if (passengerRevenue != null) {
+                            revenueBreakdowns.put("passenger", passengerRevenue);
+                            logger.info("Found passenger revenue: {} million", passengerRevenue);
+                        }
+                    }
+
+                    // Look for cargo/freight revenue
+                    if ((rowText.contains("cargo revenue") || rowText.contains("cargo") && rowText.contains("revenue") ||
+                         rowText.contains("freight revenue") || rowText.contains("freight") && rowText.contains("revenue")) &&
+                        !rowText.contains("per ")) {
+
+                        BigDecimal cargoRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
+                        if (cargoRevenue != null) {
+                            revenueBreakdowns.put("cargo", cargoRevenue);
+                            logger.info("Found cargo revenue: {} million", cargoRevenue);
+                        }
+                    }
+
+                    // Look for other revenue
+                    if ((rowText.contains("other revenue") || rowText.contains("other operating revenue")) &&
+                        !rowText.contains("per ")) {
+
+                        BigDecimal otherRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
+                        if (otherRevenue != null) {
+                            revenueBreakdowns.put("other", otherRevenue);
+                            logger.info("Found other revenue: {} million", otherRevenue);
+                        }
+                    }
+                }
+            }
+
+            logger.info("Revenue breakdown extraction complete. Found {} revenue categories", revenueBreakdowns.size());
+            return revenueBreakdowns;
+
+        } catch (Exception e) {
+            logger.error("Error extracting revenue breakdowns from HTML", e);
+            return revenueBreakdowns;
+        }
+    }
+
+    /**
+     * Helper method to extract revenue value from a table row for a specific fiscal year
+     */
+    private BigDecimal extractRevenueValueFromRow(Element row, String fiscalYear, Element table) {
+        Elements cells = row.select("td, th");
+        java.util.List<BigDecimal> numbersFound = new java.util.ArrayList<>();
+        java.util.List<Integer> numberIndices = new java.util.ArrayList<>();
+
+        // Collect all valid numbers (revenue is typically in millions or billions)
+        for (int i = 0; i < cells.size(); i++) {
+            String cellText = cells.get(i).text();
+            BigDecimal value = parseNumber(cellText);
+            // Revenue should be at least in tens of millions
+            if (value != null && value.compareTo(new BigDecimal("10")) > 0) {
+                numbersFound.add(value);
+                numberIndices.add(i);
+            }
+        }
+
+        if (!numbersFound.isEmpty()) {
+            // Try to find which number corresponds to the fiscal year
+            BigDecimal selectedValue = selectValueForFiscalYear(
+                cells, numbersFound, numberIndices, fiscalYear, table);
+
+            if (selectedValue != null) {
+                // Revenue is typically in millions in the 10-K
+                // Convert to actual dollars (millions * 1,000,000)
+                return selectedValue.multiply(new BigDecimal("1000000"));
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -202,11 +372,19 @@ public class OperationalMetricsParser {
         String[] exclusionTerms;
 
         if (metricType.equals("ASM")) {
-            searchTerms = new String[]{"available seat miles", "asms (millions)"};
+            searchTerms = new String[]{"available seat miles", "asms (millions)", "asm"};
             exclusionTerms = new String[]{"per asm", "revenue per asm", "/ asm"};
-        } else {
-            searchTerms = new String[]{"revenue passenger miles", "rpms (millions)"};
+        } else if (metricType.equals("RPM")) {
+            searchTerms = new String[]{"revenue passenger miles", "rpms (millions)", "rpm"};
             exclusionTerms = new String[]{"per rpm", "/ rpm"};
+        } else if (metricType.equals("CTM")) {
+            searchTerms = new String[]{"cargo ton miles", "freight ton miles", "ctm"};
+            exclusionTerms = new String[]{"per ctm", "/ ctm"};
+        } else if (metricType.equals("ATM")) {
+            searchTerms = new String[]{"available ton miles", "atm"};
+            exclusionTerms = new String[]{"per atm", "/ atm"};
+        } else {
+            return null;
         }
 
         for (Element table : tables) {
@@ -374,7 +552,7 @@ public class OperationalMetricsParser {
     /**
      * Extract load factor from tables
      */
-    private BigDecimal extractLoadFactorFromTables(Document doc) {
+    private BigDecimal extractLoadFactorFromTables(Document doc, String fiscalYear) {
         Elements tables = doc.select("table");
 
         for (Element table : tables) {
@@ -386,7 +564,8 @@ public class OperationalMetricsParser {
             Elements rows = table.select("tr");
             for (Element row : rows) {
                 String rowText = row.text().toLowerCase();
-                if (rowText.contains("load factor") || rowText.contains("passenger load")) {
+                if ((rowText.contains("load factor") || rowText.contains("passenger load")) &&
+                    !rowText.contains("cargo") && !rowText.contains("freight")) {
                     // Look for percentage in this row
                     Pattern percentPattern = Pattern.compile("(\\d{1,3}\\.\\d{1,2})\\s*%");
                     Matcher matcher = percentPattern.matcher(row.text());
@@ -394,6 +573,120 @@ public class OperationalMetricsParser {
                         BigDecimal value = new BigDecimal(matcher.group(1));
                         logger.info("Found Load Factor in table: {}%", value);
                         return value;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract cargo load factor from tables
+     */
+    private BigDecimal extractCargoLoadFactorFromTables(Document doc, String fiscalYear) {
+        Elements tables = doc.select("table");
+
+        for (Element table : tables) {
+            String tableText = table.text().toLowerCase();
+            if (!tableText.contains("load factor") && !tableText.contains("cargo")) {
+                continue;
+            }
+
+            Elements rows = table.select("tr");
+            for (Element row : rows) {
+                String rowText = row.text().toLowerCase();
+                if ((rowText.contains("cargo") && rowText.contains("load factor")) ||
+                    (rowText.contains("freight") && rowText.contains("load factor"))) {
+                    // Look for percentage in this row
+                    Pattern percentPattern = Pattern.compile("(\\d{1,3}\\.\\d{1,2})\\s*%");
+                    Matcher matcher = percentPattern.matcher(row.text());
+                    if (matcher.find()) {
+                        BigDecimal value = new BigDecimal(matcher.group(1));
+                        logger.info("Found Cargo Load Factor in table: {}%", value);
+                        return value;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract departures from tables
+     */
+    private BigDecimal extractDeparturesFromTables(Document doc, String fiscalYear) {
+        Elements tables = doc.select("table");
+
+        for (Element table : tables) {
+            String tableText = table.text().toLowerCase();
+            if (!tableText.contains("departure") && !tableText.contains("flight")) {
+                continue;
+            }
+
+            Elements rows = table.select("tr");
+            for (Element row : rows) {
+                String rowText = row.text().toLowerCase();
+                if (rowText.contains("departure") || rowText.contains("flights operated")) {
+                    Elements cells = row.select("td, th");
+                    for (Element cell : cells) {
+                        String cellText = cell.text().replace(",", "").replace(" ", "");
+                        try {
+                            Pattern numberPattern = Pattern.compile("(\\d+(?:\\.\\d+)?)");
+                            Matcher matcher = numberPattern.matcher(cellText);
+                            if (matcher.find()) {
+                                BigDecimal value = new BigDecimal(matcher.group(1));
+                                if (value.compareTo(new BigDecimal("100")) > 0 &&
+                                    value.compareTo(new BigDecimal("10000000")) < 0) {
+                                    logger.info("Found Departures in table: {}", value);
+                                    return value;
+                                }
+                            }
+                        } catch (Exception e) {
+                            // Continue searching
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract block hours from tables
+     */
+    private BigDecimal extractBlockHoursFromTables(Document doc, String fiscalYear) {
+        Elements tables = doc.select("table");
+
+        for (Element table : tables) {
+            String tableText = table.text().toLowerCase();
+            if (!tableText.contains("block hour")) {
+                continue;
+            }
+
+            Elements rows = table.select("tr");
+            for (Element row : rows) {
+                String rowText = row.text().toLowerCase();
+                if (rowText.contains("block hour")) {
+                    Elements cells = row.select("td, th");
+                    for (Element cell : cells) {
+                        String cellText = cell.text().replace(",", "").replace(" ", "");
+                        try {
+                            Pattern numberPattern = Pattern.compile("(\\d+(?:\\.\\d+)?)");
+                            Matcher matcher = numberPattern.matcher(cellText);
+                            if (matcher.find()) {
+                                BigDecimal value = new BigDecimal(matcher.group(1));
+                                // Block hours are typically in thousands or millions
+                                if (value.compareTo(new BigDecimal("100")) > 0) {
+                                    logger.info("Found Block Hours in table: {}", value);
+                                    return value;
+                                }
+                            }
+                        } catch (Exception e) {
+                            // Continue searching
+                        }
                     }
                 }
             }
@@ -560,5 +853,180 @@ public class OperationalMetricsParser {
             }
         }
         return null;
+    }
+
+    /**
+     * Extract cargo load factor percentage from text
+     */
+    private BigDecimal extractCargoLoadFactor(String text) {
+        for (Pattern pattern : CARGO_LOAD_FACTOR_PATTERNS) {
+            Matcher matcher = pattern.matcher(text);
+            if (matcher.find()) {
+                try {
+                    String percentStr = matcher.group(1);
+                    BigDecimal value = new BigDecimal(percentStr);
+                    logger.debug("Found Cargo Load Factor: {}%", value);
+                    return value;
+                } catch (Exception e) {
+                    logger.debug("Error parsing cargo load factor from match: {}", matcher.group(), e);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extract departures from text
+     */
+    private BigDecimal extractDepartures(String text) {
+        for (Pattern pattern : DEPARTURES_PATTERNS) {
+            Matcher matcher = pattern.matcher(text);
+            if (matcher.find()) {
+                try {
+                    String numberStr = matcher.group(1).replace(",", "");
+                    BigDecimal value = new BigDecimal(numberStr);
+                    logger.debug("Found Departures: {}", value);
+                    return value;
+                } catch (Exception e) {
+                    logger.debug("Error parsing departures from match: {}", matcher.group(), e);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extract block hours from text
+     */
+    private BigDecimal extractBlockHours(String text) {
+        for (Pattern pattern : BLOCK_HOURS_PATTERNS) {
+            Matcher matcher = pattern.matcher(text);
+            if (matcher.find()) {
+                try {
+                    String numberStr = matcher.group(1).replace(",", "");
+                    BigDecimal value = new BigDecimal(numberStr);
+
+                    // Check for unit multiplier
+                    if (matcher.groupCount() >= 2 && matcher.group(2) != null) {
+                        String unit = matcher.group(2).toLowerCase();
+                        if (unit.contains("million")) {
+                            value = value.multiply(new BigDecimal("1000000"));
+                        } else if (unit.contains("thousand")) {
+                            value = value.multiply(new BigDecimal("1000"));
+                        }
+                    }
+
+                    logger.debug("Found Block Hours: {}", value);
+                    return value;
+                } catch (Exception e) {
+                    logger.debug("Error parsing block hours from match: {}", matcher.group(), e);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extract fleet information from 10-K document
+     */
+    private void extractFleetInformation(Document doc, AirlineOperationalData data) {
+        logger.debug("Attempting to extract fleet information");
+
+        try {
+            // Look for fleet information in tables or text
+            Elements tables = doc.select("table");
+
+            for (Element table : tables) {
+                String tableText = table.text().toLowerCase();
+
+                // Look for fleet-related tables
+                if (tableText.contains("fleet") || tableText.contains("aircraft")) {
+
+                    // Try to extract fleet composition
+                    StringBuilder fleetComposition = new StringBuilder();
+                    int aircraftTypesFound = 0;
+
+                    Elements rows = table.select("tr");
+                    for (Element row : rows) {
+                        String rowText = row.text();
+
+                        // Look for aircraft types (Boeing 737, Airbus A320, etc.)
+                        Pattern aircraftPattern = Pattern.compile("(Boeing|Airbus|McDonnell|Embraer|Bombardier)\\s+([A-Z]?\\d{3}[A-Z]?(?:-\\d+)?)", Pattern.CASE_INSENSITIVE);
+                        Matcher matcher = aircraftPattern.matcher(rowText);
+
+                        if (matcher.find()) {
+                            String aircraftType = matcher.group(1) + " " + matcher.group(2);
+
+                            // Try to find the count for this aircraft type
+                            Elements cells = row.select("td, th");
+                            for (Element cell : cells) {
+                                try {
+                                    String cellText = cell.text().trim().replace(",", "");
+                                    int count = Integer.parseInt(cellText);
+                                    if (count > 0 && count < 2000) { // Sanity check
+                                        if (fleetComposition.length() > 0) {
+                                            fleetComposition.append(", ");
+                                        }
+                                        fleetComposition.append(count).append(" ").append(aircraftType);
+                                        aircraftTypesFound++;
+                                        break;
+                                    }
+                                } catch (NumberFormatException e) {
+                                    // Not a number, continue
+                                }
+                            }
+                        }
+                    }
+
+                    if (fleetComposition.length() > 0) {
+                        data.setFleetComposition(fleetComposition.toString());
+                        logger.info("Found fleet composition: {}", fleetComposition.toString());
+                    }
+
+                    // Try to extract average fleet age
+                    for (Element row : rows) {
+                        String rowText = row.text().toLowerCase();
+                        if (rowText.contains("average age") || rowText.contains("weighted average age")) {
+                            Pattern agePattern = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(?:years?)?");
+                            Matcher ageMatcher = agePattern.matcher(row.text());
+                            if (ageMatcher.find()) {
+                                try {
+                                    double age = Double.parseDouble(ageMatcher.group(1));
+                                    if (age > 0 && age < 50) { // Sanity check
+                                        data.setAverageFleetAge((int) Math.round(age));
+                                        logger.info("Found average fleet age: {} years", (int) Math.round(age));
+                                    }
+                                } catch (Exception e) {
+                                    logger.debug("Error parsing fleet age", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If we didn't find fleet composition in tables, try text search
+            if (data.getFleetComposition() == null) {
+                String fullText = doc.body().text();
+
+                // Look for fleet size mentions
+                Pattern fleetSizePattern = Pattern.compile("fleet\\s+of\\s+(\\d+)\\s+aircraft", Pattern.CASE_INSENSITIVE);
+                Matcher fleetMatcher = fleetSizePattern.matcher(fullText);
+                if (fleetMatcher.find()) {
+                    try {
+                        int fleetSize = Integer.parseInt(fleetMatcher.group(1));
+                        if (data.getFleetSize() == null && fleetSize > 0 && fleetSize < 2000) {
+                            data.setFleetSize(fleetSize);
+                            logger.info("Found fleet size from text: {}", fleetSize);
+                        }
+                    } catch (Exception e) {
+                        logger.debug("Error parsing fleet size from text", e);
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            logger.warn("Error extracting fleet information: {}", e.getMessage());
+        }
     }
 }
