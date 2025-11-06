@@ -176,6 +176,9 @@ public class XBRLParser {
                         // Extract revenue from HTML to validate XBRL data
                         BigDecimal htmlRevenue = operationalMetricsParser.extractRevenueFromHTML(htmlContent, filingYear);
 
+                        // Extract revenue breakdowns (passenger, cargo, other)
+                        java.util.Map<String, BigDecimal> revenueBreakdowns = operationalMetricsParser.extractRevenueBreakdowns(htmlContent, filingYear);
+
                         // Find the corresponding yearly data and merge operational metrics + validate revenue
                         for (YearlyFinancialData yearlyData : companyData.getYearlyData()) {
                             if (yearlyData.getFiscalYear().equals(filingYear)) {
@@ -225,6 +228,25 @@ public class XBRLParser {
                                     }
                                 }
 
+                                // Populate revenue breakdowns if found
+                                if (!revenueBreakdowns.isEmpty()) {
+                                    IncomeStatement incomeStatement = yearlyData.getIncomeStatement();
+                                    if (incomeStatement != null) {
+                                        if (revenueBreakdowns.containsKey("passenger")) {
+                                            incomeStatement.setPassengerRevenue(revenueBreakdowns.get("passenger"));
+                                            logger.info("Set passenger revenue for FY{}: {}", filingYear, revenueBreakdowns.get("passenger"));
+                                        }
+                                        if (revenueBreakdowns.containsKey("cargo")) {
+                                            incomeStatement.setCargoRevenue(revenueBreakdowns.get("cargo"));
+                                            logger.info("Set cargo revenue for FY{}: {}", filingYear, revenueBreakdowns.get("cargo"));
+                                        }
+                                        if (revenueBreakdowns.containsKey("other")) {
+                                            incomeStatement.setOtherRevenue(revenueBreakdowns.get("other"));
+                                            logger.info("Set other revenue for FY{}: {}", filingYear, revenueBreakdowns.get("other"));
+                                        }
+                                    }
+                                }
+
                                 break;
                             }
                         }
@@ -246,6 +268,7 @@ public class XBRLParser {
      * Merge operational data - prefer existing (XBRL) values, fill in missing from parsed (10-K)
      */
     private void mergeOperationalData(AirlineOperationalData existing, AirlineOperationalData parsed) {
+        // Basic capacity metrics
         if (existing.getAvailableSeatMiles() == null) {
             existing.setAvailableSeatMiles(parsed.getAvailableSeatMiles());
         }
@@ -257,6 +280,36 @@ public class XBRLParser {
         }
         if (existing.getPassengersCarried() == null) {
             existing.setPassengersCarried(parsed.getPassengersCarried());
+        }
+
+        // Cargo metrics
+        if (existing.getCargoTonMiles() == null) {
+            existing.setCargoTonMiles(parsed.getCargoTonMiles());
+        }
+        if (existing.getAvailableTonMiles() == null) {
+            existing.setAvailableTonMiles(parsed.getAvailableTonMiles());
+        }
+        if (existing.getCargoLoadFactor() == null) {
+            existing.setCargoLoadFactor(parsed.getCargoLoadFactor());
+        }
+
+        // Operational metrics
+        if (existing.getDeparturesPerformed() == null) {
+            existing.setDeparturesPerformed(parsed.getDeparturesPerformed());
+        }
+        if (existing.getBlockHours() == null) {
+            existing.setBlockHours(parsed.getBlockHours());
+        }
+
+        // Fleet information
+        if (existing.getFleetComposition() == null) {
+            existing.setFleetComposition(parsed.getFleetComposition());
+        }
+        if (existing.getAverageFleetAge() == null) {
+            existing.setAverageFleetAge(parsed.getAverageFleetAge());
+        }
+        if (existing.getFleetSize() == null) {
+            existing.setFleetSize(parsed.getFleetSize());
         }
     }
 
