@@ -108,6 +108,89 @@ public class OperationalMetricsParser {
     }
 
     /**
+     * Extract revenue from 10-K HTML to validate XBRL data
+     * Some years (especially COVID-era) have incorrect XBRL revenue values
+     */
+    public BigDecimal extractRevenueFromHTML(String htmlContent, String fiscalYear) {
+        logger.info("Extracting revenue from 10-K HTML for fiscal year: {}", fiscalYear);
+
+        try {
+            Document doc = Jsoup.parse(htmlContent);
+            Elements tables = doc.select("table");
+
+            // Search for Consolidated Statements of Operations or Income Statement
+            for (Element table : tables) {
+                String tableText = table.text().toLowerCase();
+
+                // Look for income statement indicators
+                if (!tableText.contains("statement") && !tableText.contains("operations") &&
+                    !tableText.contains("income") && !tableText.contains("revenue")) {
+                    continue;
+                }
+
+                // Skip tables that are clearly not income statements
+                if (tableText.contains("balance sheet") || tableText.contains("cash flow") ||
+                    tableText.contains("stockholders") || tableText.contains("segment")) {
+                    continue;
+                }
+
+                Elements rows = table.select("tr");
+                for (Element row : rows) {
+                    String rowText = row.text().toLowerCase();
+
+                    // Look for revenue rows (but exclude per-unit metrics)
+                    if ((rowText.contains("total operating revenue") ||
+                         rowText.contains("total revenue") ||
+                         rowText.contains("operating revenues") ||
+                         rowText.contains("total revenues") ||
+                         rowText.contains("operating revenue")) &&
+                        !rowText.contains("per ") &&
+                        !rowText.contains("average") &&
+                        !rowText.contains("yield")) {
+
+                        Elements cells = row.select("td, th");
+                        java.util.List<BigDecimal> numbersFound = new java.util.ArrayList<>();
+                        java.util.List<Integer> numberIndices = new java.util.ArrayList<>();
+
+                        // Collect all valid numbers (revenue is typically in millions or billions)
+                        for (int i = 0; i < cells.size(); i++) {
+                            String cellText = cells.get(i).text();
+                            BigDecimal value = parseNumber(cellText);
+                            // Revenue should be at least in hundreds of millions
+                            if (value != null && value.compareTo(new BigDecimal("100")) > 0) {
+                                numbersFound.add(value);
+                                numberIndices.add(i);
+                            }
+                        }
+
+                        if (!numbersFound.isEmpty()) {
+                            // Try to find which number corresponds to the fiscal year
+                            BigDecimal selectedValue = selectValueForFiscalYear(
+                                cells, numbersFound, numberIndices, fiscalYear, table);
+
+                            if (selectedValue != null) {
+                                // Revenue is typically in millions in the 10-K
+                                // Convert to actual dollars (millions * 1,000,000)
+                                BigDecimal revenue = selectedValue.multiply(new BigDecimal("1000000"));
+                                logger.info("Found revenue in table: {} million = {} from row: {}",
+                                    selectedValue, revenue, rowText.substring(0, Math.min(80, rowText.length())));
+                                return revenue;
+                            }
+                        }
+                    }
+                }
+            }
+
+            logger.warn("Could not extract revenue from 10-K HTML");
+            return null;
+
+        } catch (Exception e) {
+            logger.error("Error extracting revenue from HTML", e);
+            return null;
+        }
+    }
+
+    /**
      * Extract metrics from tables (more reliable than free text)
      */
     private BigDecimal extractFromTables(Document doc, String metricType, String fiscalYear) {
