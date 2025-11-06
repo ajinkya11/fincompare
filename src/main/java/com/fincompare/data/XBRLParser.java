@@ -305,13 +305,19 @@ public class XBRLParser {
         for (Iterator<String> it = facts.fieldNames(); it.hasNext(); ) {
             String taxonomy = it.next();
             if (!taxonomy.equals("us-gaap") && !taxonomy.equals("dei")) {
-                logger.info("Found custom taxonomy: {}", taxonomy);
                 JsonNode customFacts = facts.get(taxonomy);
 
                 // Log available fields in custom taxonomy
-                if (customFacts.fieldNames().hasNext()) {
-                    logger.debug("Custom taxonomy fields: {}", String.join(", ",
-                        iteratorToList(customFacts.fieldNames())));
+                List<String> fields = customFacts.fieldNames().hasNext() ?
+                    iteratorToList(customFacts.fieldNames()) : new ArrayList<>();
+
+                logger.info("Found custom taxonomy '{}' with {} fields", taxonomy, fields.size());
+
+                if (!fields.isEmpty()) {
+                    // Show first 10 fields as sample
+                    int sampleSize = Math.min(10, fields.size());
+                    logger.info("  Sample fields (first {}): {}", sampleSize,
+                        String.join(", ", fields.subList(0, sampleSize)));
                 }
 
                 // Look for airline-specific operational metrics with various naming conventions
@@ -341,6 +347,13 @@ public class XBRLParser {
         logger.info("Operational data extracted - ASM: {}, RPM: {}, Passengers: {}, Employees: {}",
                 data.getAvailableSeatMiles(), data.getRevenuePassengerMiles(),
                 data.getPassengersCarried(), data.getFullTimeEmployees());
+
+        // Warn if key airline metrics are missing
+        if (data.getAvailableSeatMiles() == null && data.getRevenuePassengerMiles() == null) {
+            logger.warn("Airline operational metrics (ASM/RPM) not found in XBRL companyfacts. " +
+                       "These metrics may only be available in the full 10-K filing documents, " +
+                       "not in the structured companyfacts API endpoint.");
+        }
 
         return data;
     }
