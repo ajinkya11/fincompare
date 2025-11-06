@@ -42,25 +42,70 @@ public class ConsoleReportGenerator {
      * Print side-by-side financial comparison
      */
     private void printSideBySideComparison(ComparativeAnalysis analysis) {
-        printSectionHeader("Financial Metrics Comparison");
-
         String c1Name = analysis.getCompany1().getCompanyInfo().getTickerSymbol();
         String c2Name = analysis.getCompany2().getCompanyInfo().getTickerSymbol();
 
-        YearlyFinancialData c1Data = analysis.getCompany1().getLatestYearData();
-        YearlyFinancialData c2Data = analysis.getCompany2().getLatestYearData();
+        List<YearlyFinancialData> c1AllYears = analysis.getCompany1().getYearlyData();
+        List<YearlyFinancialData> c2AllYears = analysis.getCompany2().getYearlyData();
 
-        // Check if fiscal years match and warn if not
-        if (c1Data != null && c2Data != null &&
-            !c1Data.getFiscalYear().equals(c2Data.getFiscalYear())) {
-            System.out.println(ansi().fg(Ansi.Color.YELLOW).bold()
-                    .a("⚠ WARNING: Comparing different fiscal years - ")
-                    .a(c1Name + ": " + c1Data.getFiscalYear() + ", ")
-                    .a(c2Name + ": " + c2Data.getFiscalYear())
-                    .reset());
-            System.out.println();
+        // If multi-year data, print each year separately
+        if (c1AllYears.size() > 1 || c2AllYears.size() > 1) {
+            printSectionHeader("Financial Metrics Comparison - Multi-Year View");
+            System.out.println("Showing detailed comparison for each fiscal year:\n");
+
+            // Find the maximum number of years to display
+            int maxYears = Math.max(c1AllYears.size(), c2AllYears.size());
+
+            for (int i = 0; i < maxYears; i++) {
+                YearlyFinancialData c1Data = i < c1AllYears.size() ? c1AllYears.get(i) : null;
+                YearlyFinancialData c2Data = i < c2AllYears.size() ? c2AllYears.get(i) : null;
+
+                String year1 = c1Data != null ? c1Data.getFiscalYear() : "N/A";
+                String year2 = c2Data != null ? c2Data.getFiscalYear() : "N/A";
+
+                if (i > 0) {
+                    System.out.println(); // Add spacing between years
+                }
+
+                System.out.println(ansi().fg(Ansi.Color.CYAN).bold()
+                        .a("=== Fiscal Year: " + c1Name + " " + year1 + " vs " + c2Name + " " + year2 + " ===")
+                        .reset());
+
+                // Check if fiscal years match and warn if not
+                if (c1Data != null && c2Data != null && !year1.equals(year2)) {
+                    System.out.println(ansi().fg(Ansi.Color.YELLOW).bold()
+                            .a("⚠ WARNING: Comparing different fiscal years")
+                            .reset());
+                }
+
+                printYearComparison(c1Name, c2Name, c1Data, c2Data);
+            }
+        } else {
+            // Single year view (original behavior)
+            printSectionHeader("Financial Metrics Comparison");
+
+            YearlyFinancialData c1Data = c1AllYears.isEmpty() ? null : c1AllYears.get(0);
+            YearlyFinancialData c2Data = c2AllYears.isEmpty() ? null : c2AllYears.get(0);
+
+            // Check if fiscal years match and warn if not
+            if (c1Data != null && c2Data != null &&
+                !c1Data.getFiscalYear().equals(c2Data.getFiscalYear())) {
+                System.out.println(ansi().fg(Ansi.Color.YELLOW).bold()
+                        .a("⚠ WARNING: Comparing different fiscal years - ")
+                        .a(c1Name + ": " + c1Data.getFiscalYear() + ", ")
+                        .a(c2Name + ": " + c2Data.getFiscalYear())
+                        .reset());
+                System.out.println();
+            }
+
+            printYearComparison(c1Name, c2Name, c1Data, c2Data);
         }
+    }
 
+    /**
+     * Print comparison for a single year
+     */
+    private void printYearComparison(String c1Name, String c2Name, YearlyFinancialData c1Data, YearlyFinancialData c2Data) {
         // Print table header with fiscal years
         String header1 = c1Name + (c1Data != null ? " (FY" + c1Data.getFiscalYear() + ")" : "");
         String header2 = c2Name + (c2Data != null ? " (FY" + c2Data.getFiscalYear() + ")" : "");
