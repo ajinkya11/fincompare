@@ -118,35 +118,79 @@ public class ConsoleReportGenerator {
             printComparisonSection("INCOME STATEMENT");
             printComparisonRow("Total Revenue", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
                     IncomeStatement::getTotalRevenue, true);
+            printComparisonRow("Gross Profit", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
+                    IncomeStatement::getGrossProfit, true);
             printComparisonRow("Operating Expenses", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
                     IncomeStatement::getOperatingExpenses, true);
+            printComparisonRow("  - Fuel Costs", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
+                    IncomeStatement::getFuelCosts, true);
+            printComparisonRow("  - Labor Costs", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
+                    IncomeStatement::getLaborCosts, true);
+            printComparisonRow("  - Depreciation & Amort.", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
+                    IncomeStatement::getDepreciationAmortization, true);
             printComparisonRow("Operating Income", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
                     IncomeStatement::getOperatingIncome, true);
+            printComparisonRow("Interest Expense", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
+                    IncomeStatement::getInterestExpense, true);
             printComparisonRow("Net Income", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
                     IncomeStatement::getNetIncome, true);
+            printComparisonRow("Basic EPS", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
+                    IncomeStatement::getBasicEPS, false);
             printComparisonRow("Diluted EPS", c1Data.getIncomeStatement(), c2Data.getIncomeStatement(),
                     IncomeStatement::getDilutedEPS, false);
 
             // Balance Sheet Metrics
-            printComparisonSection("BALANCE SHEET");
+            printComparisonSection("BALANCE SHEET - ASSETS");
             printComparisonRow("Total Assets", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
                     BalanceSheet::getTotalAssets, true);
-            printComparisonRow("Cash & Equivalents", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+            printComparisonRow("Current Assets", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+                    BalanceSheet::getCurrentAssets, true);
+            printComparisonRow("  - Cash & Equivalents", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
                     BalanceSheet::getCashAndEquivalents, true);
+            printComparisonRow("  - Accounts Receivable", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+                    BalanceSheet::getAccountsReceivable, true);
+            printComparisonRow("  - Inventory", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+                    BalanceSheet::getInventory, true);
+            printComparisonRow("PP&E (Gross)", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+                    BalanceSheet::getPropertyPlantEquipment, true);
+            printComparisonRow("PP&E (Net)", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+                    BalanceSheet::getNetPPE, true);
+
+            printComparisonSection("BALANCE SHEET - LIABILITIES & EQUITY");
             printComparisonRow("Total Liabilities", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
                     BalanceSheet::getTotalLiabilities, true);
+            printComparisonRow("Current Liabilities", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+                    BalanceSheet::getCurrentLiabilities, true);
+            printComparisonRow("Short Term Debt", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+                    BalanceSheet::getShortTermDebt, true);
+            printComparisonRow("Long Term Debt", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+                    BalanceSheet::getLongTermDebt, true);
             printComparisonRow("Total Equity", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
                     BalanceSheet::getTotalEquity, true);
+            printComparisonRow("Retained Earnings", c1Data.getBalanceSheet(), c2Data.getBalanceSheet(),
+                    BalanceSheet::getRetainedEarnings, true);
 
             // Cash Flow Metrics
-            printComparisonSection("CASH FLOW");
+            printComparisonSection("CASH FLOW STATEMENT");
             printComparisonRow("Operating Cash Flow", c1Data.getCashFlowStatement(), c2Data.getCashFlowStatement(),
                     CashFlowStatement::getOperatingCashFlow, true);
+            printComparisonRow("Investing Cash Flow", c1Data.getCashFlowStatement(), c2Data.getCashFlowStatement(),
+                    CashFlowStatement::getInvestingCashFlow, true);
+            printComparisonRow("  - Capital Expenditures", c1Data.getCashFlowStatement(), c2Data.getCashFlowStatement(),
+                    CashFlowStatement::getCapitalExpenditures, true);
+            printComparisonRow("Financing Cash Flow", c1Data.getCashFlowStatement(), c2Data.getCashFlowStatement(),
+                    CashFlowStatement::getFinancingCashFlow, true);
+            printComparisonRow("  - Debt Issuance", c1Data.getCashFlowStatement(), c2Data.getCashFlowStatement(),
+                    CashFlowStatement::getDebtIssuance, true);
+            printComparisonRow("  - Debt Repayment", c1Data.getCashFlowStatement(), c2Data.getCashFlowStatement(),
+                    CashFlowStatement::getDebtRepayment, true);
             printComparisonRow("Free Cash Flow", c1Data.getCashFlowStatement(), c2Data.getCashFlowStatement(),
                     CashFlowStatement::getFreeCashFlow, true);
 
             // Financial Ratios
-            printComparisonSection("FINANCIAL RATIOS");
+            printComparisonSection("PROFITABILITY RATIOS");
+            printMetricRow("Gross Margin %", c1Data.getMetrics(), c2Data.getMetrics(),
+                    FinancialMetrics::getGrossMargin, true);
             printMetricRow("Operating Margin %", c1Data.getMetrics(), c2Data.getMetrics(),
                     FinancialMetrics::getOperatingMargin, true);
             printMetricRow("Net Margin %", c1Data.getMetrics(), c2Data.getMetrics(),
@@ -155,10 +199,22 @@ public class ConsoleReportGenerator {
                     FinancialMetrics::getReturnOnEquity, true);
             printMetricRow("ROA %", c1Data.getMetrics(), c2Data.getMetrics(),
                     FinancialMetrics::getReturnOnAssets, true);
+
+            printComparisonSection("LIQUIDITY & LEVERAGE RATIOS");
             printMetricRow("Current Ratio", c1Data.getMetrics(), c2Data.getMetrics(),
                     FinancialMetrics::getCurrentRatio, true);
+            printMetricRow("Quick Ratio", c1Data.getMetrics(), c2Data.getMetrics(),
+                    FinancialMetrics::getQuickRatio, true);
             printMetricRow("Debt-to-Equity", c1Data.getMetrics(), c2Data.getMetrics(),
-                    FinancialMetrics::getDebtToEquity, false);
+                    FinancialMetrics::getDebtToEquity, true);
+            printMetricRow("Debt-to-Assets", c1Data.getMetrics(), c2Data.getMetrics(),
+                    FinancialMetrics::getDebtToAssets, true);
+            printMetricRow("Interest Coverage", c1Data.getMetrics(), c2Data.getMetrics(),
+                    FinancialMetrics::getInterestCoverage, true);
+
+            printComparisonSection("EFFICIENCY RATIOS");
+            printMetricRow("Asset Turnover", c1Data.getMetrics(), c2Data.getMetrics(),
+                    FinancialMetrics::getAssetTurnover, true);
             printMetricRow("Revenue Growth %", c1Data.getMetrics(), c2Data.getMetrics(),
                     FinancialMetrics::getRevenueGrowth, true);
         }
