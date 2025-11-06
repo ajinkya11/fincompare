@@ -137,54 +137,50 @@ public class XBRLParser {
      * Extract available fiscal years from the data
      */
     private Set<String> extractFiscalYears(JsonNode usGaap, int maxYears) {
-        Set<String> years = new TreeSet<>(Collections.reverseOrder());
         Set<String> allYears = new TreeSet<>(Collections.reverseOrder());
 
-        // Look at multiple revenue tags to find all available years
+        // Check ALL revenue tags to find all available years (don't break after first tag)
         List<String> revenueTags = XBRL_TAGS.get("revenue");
+        int tagsChecked = 0;
+        int tagsWithData = 0;
+
         for (String tag : revenueTags) {
             if (usGaap.has(tag)) {
+                tagsChecked++;
                 JsonNode units = usGaap.get(tag).path("units");
                 if (units.has("USD")) {
+                    Set<String> yearsFromThisTag = new TreeSet<>(Collections.reverseOrder());
                     for (JsonNode entry : units.get("USD")) {
                         String fy = entry.path("fy").asText();
                         String form = entry.path("form").asText();
                         String frame = entry.path("frame").asText();
                         String fp = entry.path("fp").asText();
 
-                        // Collect all 10-K years as fallback
+                        // Collect ALL 10-K years regardless of frame/fp
+                        // Companies may use different formats in different years
                         if (!fy.isEmpty() && "10-K".equals(form)) {
                             allYears.add(fy);
-
-                            // Prefer full-year data: either CY frames, FY fiscal period, or Q4 data
-                            if (frame.contains("CY") || "FY".equals(fp) || frame.isEmpty()) {
-                                years.add(fy);
-                                logger.debug("Found fiscal year {} for form 10-K (frame: {}, fp: {})", fy, frame, fp);
-                            }
+                            yearsFromThisTag.add(fy);
+                            logger.debug("Tag {}: Found fiscal year {} (frame: {}, fp: {})", tag, fy, frame, fp);
                         }
                     }
-                }
 
-                // If we found years from this tag, use them
-                if (!years.isEmpty() || !allYears.isEmpty()) {
-                    break;
+                    if (!yearsFromThisTag.isEmpty()) {
+                        tagsWithData++;
+                        logger.info("Tag '{}' has 10-K data for years: {}", tag, yearsFromThisTag);
+                    }
                 }
+                // REMOVED: Don't break! Check ALL tags to get complete year coverage
             }
         }
 
-        // If no years found with strict filtering, use all 10-K years
-        if (years.isEmpty() && !allYears.isEmpty()) {
-            logger.warn("No fiscal years found with CY/FY filter, using all 10-K filings: {}", allYears);
-            years = allYears;
-        }
-
-        // Log available years
-        logger.info("Available fiscal years with 10-K data: {}", years);
+        logger.info("Checked {} revenue tags, found data in {} tags", tagsChecked, tagsWithData);
+        logger.info("Available fiscal years with 10-K data (combined from all tags): {}", allYears);
 
         // Return only the requested number of most recent years
         Set<String> result = new TreeSet<>(Collections.reverseOrder());
         int count = 0;
-        for (String year : years) {
+        for (String year : allYears) {
             if (count >= maxYears) break;
             result.add(year);
             count++;
@@ -410,7 +406,8 @@ public class XBRLParser {
      * Find value for a specific fiscal year from an array of data points
      */
     private BigDecimal findValueForFiscalYear(JsonNode dataPoints, String fiscalYear) {
-        BigDecimal annualValue = null;
+        BigDecimal preferredValue = null;
+        BigDecimal fallbackValue = null;
 
         for (JsonNode point : dataPoints) {
             String fy = point.path("fy").asText();
@@ -418,19 +415,24 @@ public class XBRLParser {
             String frame = point.path("frame").asText();
             String fp = point.path("fp").asText();
 
-            // Match fiscal year and prefer 10-K filings with full year data
+            // Match fiscal year and look for 10-K filings
             if (fiscalYear.equals(fy) && "10-K".equals(form)) {
                 if (point.has("val")) {
-                    // Prefer CY (Calendar Year) frames or FY (Fiscal Year) period for annual data
+                    BigDecimal value = new BigDecimal(point.get("val").asText());
+
+                    // Prefer CY (Calendar Year) frames or FY (Fiscal Year) period
                     if (frame.contains("CY") || "FY".equals(fp)) {
-                        return new BigDecimal(point.get("val").asText());
-                    } else if (annualValue == null) {
-                        // Fallback to any 10-K data for this year
-                        annualValue = new BigDecimal(point.get("val").asText());
+                        preferredValue = value;
+                        // Keep looking for best match but remember this
+                    } else if (fallbackValue == null) {
+                        // Accept any 10-K data as fallback
+                        fallbackValue = value;
                     }
                 }
             }
         }
-        return annualValue;
+
+        // Return preferred value if found, otherwise fallback
+        return preferredValue != null ? preferredValue : fallbackValue;
     }
 }
