@@ -16,6 +16,8 @@ public class XBRLParser {
     private static final Logger logger = LoggerFactory.getLogger(XBRLParser.class);
 
     private final ObjectMapper objectMapper;
+    private final SECEdgarClient secEdgarClient;
+    private final OperationalMetricsParser operationalMetricsParser;
 
     // Common XBRL tags for financial data
     private static final Map<String, List<String>> XBRL_TAGS = new HashMap<>();
@@ -78,8 +80,10 @@ public class XBRLParser {
         ));
     }
 
-    public XBRLParser() {
+    public XBRLParser(SECEdgarClient secEdgarClient, OperationalMetricsParser operationalMetricsParser) {
         this.objectMapper = new ObjectMapper();
+        this.secEdgarClient = secEdgarClient;
+        this.operationalMetricsParser = operationalMetricsParser;
     }
 
     /**
@@ -129,8 +133,89 @@ public class XBRLParser {
             companyData.addYearData(yearlyData);
         }
 
+        // Attempt to parse operational metrics from 10-K filings
+        try {
+            enrichWithOperationalMetrics(companyData, companyInfo.getCik(), fiscalYears);
+        } catch (Exception e) {
+            logger.warn("Could not enrich with operational metrics from 10-K filings: {}", e.getMessage());
+        }
+
         logger.info("Successfully parsed financial data for {} years", fiscalYears.size());
         return companyData;
+    }
+
+    /**
+     * Enrich company data with operational metrics from 10-K filings
+     */
+    private void enrichWithOperationalMetrics(CompanyFinancialData companyData, String cik, Set<String> fiscalYears) {
+        try {
+            logger.info("Attempting to fetch operational metrics from 10-K filings for CIK: {}", cik);
+
+            // Fetch recent 10-K filings
+            List<SECFilingMetadata> filings = secEdgarClient.get10KFilings(cik, fiscalYears.size());
+
+            if (filings.isEmpty()) {
+                logger.warn("No 10-K filings found for CIK: {}", cik);
+                return;
+            }
+
+            // Match filings to fiscal years and parse operational metrics
+            for (SECFilingMetadata filing : filings) {
+                String filingYear = filing.getFiscalYear();
+
+                if (filingYear != null && fiscalYears.contains(filingYear)) {
+                    logger.info("Downloading 10-K filing for FY{}: {}", filingYear, filing.getDocumentUrl());
+
+                    try {
+                        // Download the 10-K document
+                        String htmlContent = secEdgarClient.downloadFiling(filing.getDocumentUrl());
+
+                        // Parse operational metrics
+                        AirlineOperationalData opMetrics = operationalMetricsParser.parseOperationalMetrics(htmlContent, filingYear);
+
+                        // Find the corresponding yearly data and merge operational metrics
+                        for (YearlyFinancialData yearlyData : companyData.getYearlyData()) {
+                            if (yearlyData.getFiscalYear().equals(filingYear)) {
+                                // Merge: keep XBRL data if present, otherwise use 10-K parsed data
+                                AirlineOperationalData existing = yearlyData.getOperationalData();
+                                if (existing != null) {
+                                    mergeOperationalData(existing, opMetrics);
+                                } else {
+                                    yearlyData.setOperationalData(opMetrics);
+                                }
+                                break;
+                            }
+                        }
+
+                        logger.info("Successfully enriched FY{} with operational metrics", filingYear);
+
+                    } catch (Exception e) {
+                        logger.warn("Failed to process 10-K filing for FY{}: {}", filingYear, e.getMessage());
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            logger.error("Error enriching with operational metrics", e);
+        }
+    }
+
+    /**
+     * Merge operational data - prefer existing (XBRL) values, fill in missing from parsed (10-K)
+     */
+    private void mergeOperationalData(AirlineOperationalData existing, AirlineOperationalData parsed) {
+        if (existing.getAvailableSeatMiles() == null) {
+            existing.setAvailableSeatMiles(parsed.getAvailableSeatMiles());
+        }
+        if (existing.getRevenuePassengerMiles() == null) {
+            existing.setRevenuePassengerMiles(parsed.getRevenuePassengerMiles());
+        }
+        if (existing.getLoadFactor() == null) {
+            existing.setLoadFactor(parsed.getLoadFactor());
+        }
+        if (existing.getPassengersCarried() == null) {
+            existing.setPassengersCarried(parsed.getPassengersCarried());
+        }
     }
 
     /**
