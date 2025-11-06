@@ -540,6 +540,146 @@ public class ConsoleReportGenerator {
         String c1Name = analysis.getCompany1().getCompanyInfo().getCompanyName();
         String c2Name = analysis.getCompany2().getCompanyInfo().getCompanyName();
 
+        List<YearlyFinancialData> c1Years = analysis.getCompany1().getYearlyData();
+        List<YearlyFinancialData> c2Years = analysis.getCompany2().getYearlyData();
+
+        YearlyFinancialData c1Latest = c1Years.get(0);
+        YearlyFinancialData c2Latest = c2Years.get(0);
+
+        // Determine if we have multi-year data
+        boolean multiYear = c1Years.size() > 1 || c2Years.size() > 1;
+
+        if (multiYear) {
+            printMultiYearTable(analysis);
+        } else {
+            printSingleYearSummary(analysis);
+        }
+    }
+
+    /**
+     * Print multi-year comparison table with airlines and years as columns
+     */
+    private void printMultiYearTable(ComparativeAnalysis analysis) {
+        String c1Ticker = analysis.getCompany1().getCompanyInfo().getTickerSymbol();
+        String c2Ticker = analysis.getCompany2().getCompanyInfo().getTickerSymbol();
+
+        List<YearlyFinancialData> c1Years = analysis.getCompany1().getYearlyData();
+        List<YearlyFinancialData> c2Years = analysis.getCompany2().getYearlyData();
+
+        int numYears = Math.max(c1Years.size(), c2Years.size());
+        String yearRange = c1Years.get(c1Years.size() - 1).getFiscalYear() + "-" + c1Years.get(0).getFiscalYear();
+
+        // Box header
+        System.out.println();
+        System.out.println("+============================================================================+");
+        String title = String.format(" AIRLINE FINANCIAL COMPARISON: %s vs %s (FY %s) ", c1Ticker, c2Ticker, yearRange);
+        System.out.println("|" + centerText(title, 76) + "|");
+        System.out.println("+============================================================================+");
+        System.out.println();
+
+        // Build column headers dynamically
+        StringBuilder headerLine = new StringBuilder(String.format("%-24s", "Metric"));
+        for (int i = 0; i < c1Years.size(); i++) {
+            String year = c1Years.get(i).getFiscalYear();
+            headerLine.append(String.format(" %9s", c1Ticker + " " + year));
+        }
+        for (int i = 0; i < c2Years.size(); i++) {
+            String year = c2Years.get(i).getFiscalYear();
+            headerLine.append(String.format(" %9s", c2Ticker + " " + year));
+        }
+
+        System.out.println(headerLine.toString());
+        System.out.println(repeat("-", 24 + (c1Years.size() + c2Years.size()) * 10));
+
+        // Revenue
+        printMultiYearMetricRow("Revenue ($B)", c1Years, c2Years,
+            data -> formatBillionsCompact(data.getIncomeStatement().getTotalRevenue()));
+
+        // Operating Margin
+        printMultiYearMetricRow("Operating Margin %", c1Years, c2Years,
+            data -> formatPercentCompact(data.getMetrics().getOperatingMargin()));
+
+        // Net Margin
+        printMultiYearMetricRow("Net Margin %", c1Years, c2Years,
+            data -> formatPercentCompact(data.getMetrics().getNetMargin()));
+
+        // RASM
+        printMultiYearMetricRow("RASM (¢)", c1Years, c2Years,
+            data -> formatCentsCompact(data.getOperationalData().getRasm()));
+
+        // CASM
+        printMultiYearMetricRow("CASM (¢)", c1Years, c2Years,
+            data -> formatCentsCompact(data.getOperationalData().getCasm()));
+
+        // CASM-ex
+        printMultiYearMetricRow("CASM-ex fuel (¢)", c1Years, c2Years,
+            data -> formatCentsCompact(data.getOperationalData().getCasmEx()));
+
+        // Load Factor
+        printMultiYearMetricRow("Load Factor %", c1Years, c2Years,
+            data -> formatPercentCompact(data.getOperationalData().getPassengerLoadFactor()));
+
+        // ASM
+        printMultiYearMetricRow("ASM (millions)", c1Years, c2Years,
+            data -> formatMillionsCompact(data.getOperationalData().getAvailableSeatMiles()));
+
+        // RPM
+        printMultiYearMetricRow("RPM (millions)", c1Years, c2Years,
+            data -> formatMillionsCompact(data.getOperationalData().getRevenuePassengerMiles()));
+
+        System.out.println();
+
+        // Bottom line summary
+        System.out.println("COMPETITIVE POSITION");
+        System.out.println(repeat("-", 77));
+        List<String> c1Strengths = analysis.getCompany1Strengths();
+        List<String> c2Weaknesses = analysis.getCompany2Weaknesses();
+
+        if (!c1Strengths.isEmpty()) {
+            System.out.println(colorize("[+] " + c1Ticker + ": " + String.join(", ", c1Strengths.subList(0, Math.min(2, c1Strengths.size()))), Ansi.Color.GREEN));
+        }
+        if (!c2Weaknesses.isEmpty()) {
+            System.out.println(colorize("[-] " + c2Ticker + ": " + String.join(", ", c2Weaknesses.subList(0, Math.min(2, c2Weaknesses.size()))), Ansi.Color.RED));
+        }
+
+        System.out.println();
+        System.out.println(repeat("=", 77));
+        System.out.println();
+        System.out.println("TIP: Use --detail for full financials | --ops for operational deep-dive");
+        System.out.println();
+    }
+
+    /**
+     * Print a single metric row for multi-year table
+     */
+    private void printMultiYearMetricRow(String metricName,
+                                         List<YearlyFinancialData> c1Years,
+                                         List<YearlyFinancialData> c2Years,
+                                         java.util.function.Function<YearlyFinancialData, String> formatter) {
+        StringBuilder row = new StringBuilder(String.format("%-24s", metricName));
+
+        // Company 1 values
+        for (YearlyFinancialData data : c1Years) {
+            row.append(String.format(" %9s", formatter.apply(data)));
+        }
+
+        // Company 2 values
+        for (YearlyFinancialData data : c2Years) {
+            row.append(String.format(" %9s", formatter.apply(data)));
+        }
+
+        System.out.println(row.toString());
+    }
+
+    /**
+     * Print single-year summary (original format)
+     */
+    private void printSingleYearSummary(ComparativeAnalysis analysis) {
+        String c1Ticker = analysis.getCompany1().getCompanyInfo().getTickerSymbol();
+        String c2Ticker = analysis.getCompany2().getCompanyInfo().getTickerSymbol();
+        String c1Name = analysis.getCompany1().getCompanyInfo().getCompanyName();
+        String c2Name = analysis.getCompany2().getCompanyInfo().getCompanyName();
+
         YearlyFinancialData c1Latest = analysis.getCompany1().getYearlyData().get(0);
         YearlyFinancialData c2Latest = analysis.getCompany2().getYearlyData().get(0);
         String year = c1Latest.getFiscalYear();
@@ -820,5 +960,28 @@ public class ConsoleReportGenerator {
         BigDecimal delta = value1.subtract(value2);
         String sign = delta.compareTo(BigDecimal.ZERO) > 0 ? "+" : "";
         return String.format("%s%.1f", sign, delta.doubleValue());
+    }
+
+    // Compact formatting methods for multi-year table
+
+    private String formatBillionsCompact(BigDecimal value) {
+        if (value == null) return "N/A";
+        return String.format("$%.1fB", value.divide(new BigDecimal("1000000000"), 2, BigDecimal.ROUND_HALF_UP).doubleValue());
+    }
+
+    private String formatCentsCompact(BigDecimal value) {
+        if (value == null) return "N/A";
+        return String.format("%.1f", value.doubleValue());
+    }
+
+    private String formatPercentCompact(BigDecimal value) {
+        if (value == null) return "N/A";
+        return String.format("%.1f", value.doubleValue());
+    }
+
+    private String formatMillionsCompact(BigDecimal value) {
+        if (value == null) return "N/A";
+        // Format with comma separator for readability
+        return String.format("%,.0f", value.doubleValue());
     }
 }
