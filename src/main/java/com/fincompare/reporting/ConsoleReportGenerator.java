@@ -57,46 +57,9 @@ public class ConsoleReportGenerator {
         List<YearlyFinancialData> c1AllYears = analysis.getCompany1().getYearlyData();
         List<YearlyFinancialData> c2AllYears = analysis.getCompany2().getYearlyData();
 
-        // If multi-year data, print each year separately
+        // If multi-year data, use table format
         if (c1AllYears.size() > 1 || c2AllYears.size() > 1) {
-            printSectionHeader("Financial Metrics Comparison - Multi-Year View");
-            System.out.println("Showing detailed comparison for each fiscal year:\n");
-
-            // Find the maximum number of years to display
-            int maxYears = Math.max(c1AllYears.size(), c2AllYears.size());
-
-            for (int i = 0; i < maxYears; i++) {
-                YearlyFinancialData c1Data = i < c1AllYears.size() ? c1AllYears.get(i) : null;
-                YearlyFinancialData c2Data = i < c2AllYears.size() ? c2AllYears.get(i) : null;
-
-                String year1 = c1Data != null ? c1Data.getFiscalYear() : "N/A";
-                String year2 = c2Data != null ? c2Data.getFiscalYear() : "N/A";
-
-                if (i > 0) {
-                    System.out.println(); // Add spacing between years
-                }
-
-                System.out.println(ansi().fg(Ansi.Color.CYAN).bold()
-                        .a("=== Fiscal Year: " + c1Name + " " + year1 + " vs " + c2Name + " " + year2 + " ===")
-                        .reset());
-
-                // Check if fiscal years match and warn if not
-                if (c1Data != null && c2Data != null && !year1.equals(year2)) {
-                    System.out.println(ansi().fg(Ansi.Color.YELLOW).bold()
-                            .a("⚠ WARNING: Comparing different fiscal years")
-                            .reset());
-                }
-
-                printYearComparison(c1Name, c2Name, c1Data, c2Data);
-
-                // Print year-over-year changes if not the most recent year
-                // Data is ordered [2024, 2023, 2022], so previous year is at index i+1
-                if (i > 0 && (i + 1) < c1AllYears.size() && (i + 1) < c2AllYears.size()) {
-                    YearlyFinancialData c1PrevData = c1AllYears.get(i + 1);
-                    YearlyFinancialData c2PrevData = c2AllYears.get(i + 1);
-                    printYoYChanges(c1Name, c2Name, c1Data, c1PrevData, c2Data, c2PrevData);
-                }
-            }
+            printDetailedMultiYearTable(analysis);
         } else {
             // Single year view (original behavior)
             printSectionHeader("Financial Metrics Comparison");
@@ -108,7 +71,7 @@ public class ConsoleReportGenerator {
             if (c1Data != null && c2Data != null &&
                 !c1Data.getFiscalYear().equals(c2Data.getFiscalYear())) {
                 System.out.println(ansi().fg(Ansi.Color.YELLOW).bold()
-                        .a("⚠ WARNING: Comparing different fiscal years - ")
+                        .a("WARNING: Comparing different fiscal years - ")
                         .a(c1Name + ": " + c1Data.getFiscalYear() + ", ")
                         .a(c2Name + ": " + c2Data.getFiscalYear())
                         .reset());
@@ -117,6 +80,186 @@ public class ConsoleReportGenerator {
 
             printYearComparison(c1Name, c2Name, c1Data, c2Data);
         }
+    }
+
+    /**
+     * Print detailed multi-year comparison table with all financial metrics
+     */
+    private void printDetailedMultiYearTable(ComparativeAnalysis analysis) {
+        String c1Ticker = analysis.getCompany1().getCompanyInfo().getTickerSymbol();
+        String c2Ticker = analysis.getCompany2().getCompanyInfo().getTickerSymbol();
+
+        List<YearlyFinancialData> c1Years = analysis.getCompany1().getYearlyData();
+        List<YearlyFinancialData> c2Years = analysis.getCompany2().getYearlyData();
+
+        printSectionHeader("Financial Metrics Comparison - Multi-Year Table View");
+
+        // Build column headers
+        StringBuilder headerLine = new StringBuilder(String.format("%-40s", "Metric"));
+        for (YearlyFinancialData data : c1Years) {
+            headerLine.append(String.format(" %12s", c1Ticker + " " + data.getFiscalYear()));
+        }
+        for (YearlyFinancialData data : c2Years) {
+            headerLine.append(String.format(" %12s", c2Ticker + " " + data.getFiscalYear()));
+        }
+
+        System.out.println(headerLine.toString());
+        System.out.println(repeat("-", 40 + (c1Years.size() + c2Years.size()) * 13));
+
+        // INCOME STATEMENT
+        printTableSection("INCOME STATEMENT");
+        printDetailedMetricRow("Total Revenue", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getTotalRevenue()));
+        printDetailedMetricRow("Gross Profit", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getGrossProfit()));
+        printDetailedMetricRow("Operating Expenses", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getOperatingExpenses()));
+        printDetailedMetricRow("  - Fuel Costs", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getFuelCosts()));
+        printDetailedMetricRow("  - Labor Costs", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getLaborCosts()));
+        printDetailedMetricRow("  - Depreciation & Amort.", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getDepreciationAmortization()));
+        printDetailedMetricRow("Operating Income", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getOperatingIncome()));
+        printDetailedMetricRow("Interest Expense", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getInterestExpense()));
+        printDetailedMetricRow("Net Income", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getNetIncome()));
+        printDetailedMetricRow("Basic EPS", c1Years, c2Years,
+            data -> formatDecimal(data.getIncomeStatement().getBasicEPS()));
+        printDetailedMetricRow("Diluted EPS", c1Years, c2Years,
+            data -> formatDecimal(data.getIncomeStatement().getDilutedEPS()));
+
+        // BALANCE SHEET
+        System.out.println();
+        printTableSection("BALANCE SHEET - ASSETS");
+        printDetailedMetricRow("Total Assets", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getTotalAssets()));
+        printDetailedMetricRow("Current Assets", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getCurrentAssets()));
+        printDetailedMetricRow("  - Cash & Equivalents", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getCashAndEquivalents()));
+        printDetailedMetricRow("  - Accounts Receivable", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getAccountsReceivable()));
+        printDetailedMetricRow("  - Inventory", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getInventory()));
+        printDetailedMetricRow("PP&E (Net)", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getNetPPE()));
+
+        System.out.println();
+        printTableSection("BALANCE SHEET - LIABILITIES & EQUITY");
+        printDetailedMetricRow("Total Liabilities", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getTotalLiabilities()));
+        printDetailedMetricRow("Current Liabilities", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getCurrentLiabilities()));
+        printDetailedMetricRow("Short Term Debt", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getShortTermDebt()));
+        printDetailedMetricRow("Long Term Debt", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getLongTermDebt()));
+        printDetailedMetricRow("Total Equity", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getTotalEquity()));
+        printDetailedMetricRow("Retained Earnings", c1Years, c2Years,
+            data -> formatLargeNumber(data.getBalanceSheet().getRetainedEarnings()));
+
+        // CASH FLOW
+        System.out.println();
+        printTableSection("CASH FLOW STATEMENT");
+        printDetailedMetricRow("Operating Cash Flow", c1Years, c2Years,
+            data -> formatLargeNumber(data.getCashFlowStatement().getOperatingCashFlow()));
+        printDetailedMetricRow("Investing Cash Flow", c1Years, c2Years,
+            data -> formatLargeNumber(data.getCashFlowStatement().getInvestingCashFlow()));
+        printDetailedMetricRow("  - Capital Expenditures", c1Years, c2Years,
+            data -> formatLargeNumber(data.getCashFlowStatement().getCapitalExpenditures()));
+        printDetailedMetricRow("Financing Cash Flow", c1Years, c2Years,
+            data -> formatLargeNumber(data.getCashFlowStatement().getFinancingCashFlow()));
+        printDetailedMetricRow("  - Debt Issuance", c1Years, c2Years,
+            data -> formatLargeNumber(data.getCashFlowStatement().getDebtIssuance()));
+        printDetailedMetricRow("  - Debt Repayment", c1Years, c2Years,
+            data -> formatLargeNumber(data.getCashFlowStatement().getDebtRepayment()));
+        printDetailedMetricRow("Free Cash Flow", c1Years, c2Years,
+            data -> formatLargeNumber(data.getCashFlowStatement().getFreeCashFlow()));
+
+        // RATIOS
+        System.out.println();
+        printTableSection("PROFITABILITY RATIOS");
+        printDetailedMetricRow("Gross Margin %", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getGrossMargin()));
+        printDetailedMetricRow("Operating Margin %", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getOperatingMargin()));
+        printDetailedMetricRow("Net Margin %", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getNetMargin()));
+        printDetailedMetricRow("ROE %", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getReturnOnEquity()));
+        printDetailedMetricRow("ROA %", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getReturnOnAssets()));
+
+        System.out.println();
+        printTableSection("LIQUIDITY & LEVERAGE RATIOS");
+        printDetailedMetricRow("Current Ratio", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getCurrentRatio()));
+        printDetailedMetricRow("Quick Ratio", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getQuickRatio()));
+        printDetailedMetricRow("Debt-to-Equity", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getDebtToEquity()));
+        printDetailedMetricRow("Debt-to-Assets", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getDebtToAssets()));
+        printDetailedMetricRow("Interest Coverage", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getInterestCoverage()));
+
+        System.out.println();
+        printTableSection("EFFICIENCY RATIOS");
+        printDetailedMetricRow("Asset Turnover", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getAssetTurnover()));
+        printDetailedMetricRow("Revenue Growth %", c1Years, c2Years,
+            data -> formatDecimal(data.getMetrics().getRevenueGrowth()));
+
+        // OPERATIONAL METRICS
+        System.out.println();
+        printTableSection("OPERATIONAL METRICS");
+        printDetailedMetricRow("ASM (millions)", c1Years, c2Years,
+            data -> formatMillionsCompact(data.getOperationalData().getAvailableSeatMiles()));
+        printDetailedMetricRow("RPM (millions)", c1Years, c2Years,
+            data -> formatMillionsCompact(data.getOperationalData().getRevenuePassengerMiles()));
+        printDetailedMetricRow("Load Factor %", c1Years, c2Years,
+            data -> formatPercentCompact(data.getOperationalData().getPassengerLoadFactor()));
+        printDetailedMetricRow("RASM (cents)", c1Years, c2Years,
+            data -> formatCentsCompact(data.getOperationalData().getRasm()));
+        printDetailedMetricRow("CASM (cents)", c1Years, c2Years,
+            data -> formatCentsCompact(data.getOperationalData().getCasm()));
+        printDetailedMetricRow("CASM-ex fuel (cents)", c1Years, c2Years,
+            data -> formatCentsCompact(data.getOperationalData().getCasmEx()));
+
+        System.out.println();
+    }
+
+    /**
+     * Print a single metric row for detailed multi-year table
+     */
+    private void printDetailedMetricRow(String metricName,
+                                        List<YearlyFinancialData> c1Years,
+                                        List<YearlyFinancialData> c2Years,
+                                        java.util.function.Function<YearlyFinancialData, String> formatter) {
+        StringBuilder row = new StringBuilder(String.format("%-40s", metricName));
+
+        // Company 1 values
+        for (YearlyFinancialData data : c1Years) {
+            row.append(String.format(" %12s", formatter.apply(data)));
+        }
+
+        // Company 2 values
+        for (YearlyFinancialData data : c2Years) {
+            row.append(String.format(" %12s", formatter.apply(data)));
+        }
+
+        System.out.println(row.toString());
+    }
+
+    /**
+     * Print table section header
+     */
+    private void printTableSection(String title) {
+        System.out.println(ansi().fg(Ansi.Color.BLUE).bold().a(title).reset());
     }
 
     /**
@@ -983,5 +1126,10 @@ public class ConsoleReportGenerator {
         if (value == null) return "N/A";
         // Format with comma separator for readability
         return String.format("%,.0f", value.doubleValue());
+    }
+
+    private String formatDecimal(BigDecimal value) {
+        if (value == null) return "N/A";
+        return String.format("%.2f", value.doubleValue());
     }
 }
