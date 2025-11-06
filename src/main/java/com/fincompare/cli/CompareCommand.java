@@ -43,10 +43,10 @@ public class CompareCommand implements Callable<Integer> {
     @Option(names = {"--metrics"}, description = "Show only specific metrics (operational, profitability, liquidity)")
     private String metricsFilter;
 
-    @Option(names = {"--detail"}, description = "Show detailed financial statements with 3-year trends")
+    @Option(names = {"--detail"}, description = "Show detailed financial statements with 3-year trends and DOT/BTS performance data")
     private boolean detailView;
 
-    @Option(names = {"--ops"}, description = "Show operational deep-dive with unit economics and fleet details")
+    @Option(names = {"--ops"}, description = "Show operational deep-dive with unit economics and fleet details (includes DOT/BTS if available)")
     private boolean opsView;
 
     @Option(names = {"--data-quality"}, description = "Show data quality report with sources and validation")

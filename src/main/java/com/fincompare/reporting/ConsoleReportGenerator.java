@@ -2,6 +2,8 @@ package com.fincompare.reporting;
 
 import com.fincompare.models.*;
 import org.fusesource.jansi.Ansi;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -12,6 +14,7 @@ import static org.fusesource.jansi.Ansi.ansi;
 @Service
 public class ConsoleReportGenerator {
 
+    private static final Logger logger = LoggerFactory.getLogger(ConsoleReportGenerator.class);
     private static final int LABEL_WIDTH = 35;
     private static final int VALUE_WIDTH = 20;
 
@@ -949,6 +952,222 @@ public class ConsoleReportGenerator {
     }
 
     /**
+     * Print DOT/BTS Performance Data Comparison (if available)
+     */
+    private void printDOTPerformanceComparison(ComparativeAnalysis analysis) {
+        // Check if either company has DOT/BTS data
+        boolean company1HasDOT = hasAnyDOTData(analysis.getCompany1());
+        boolean company2HasDOT = hasAnyDOTData(analysis.getCompany2());
+
+        if (!company1HasDOT && !company2HasDOT) {
+            logger.info("No DOT/BTS data available for either airline");
+            return;
+        }
+
+        System.out.println();
+        printSectionHeader("DOT/BTS Performance Metrics");
+
+        String c1Ticker = analysis.getCompany1().getCompanyInfo().getTickerSymbol();
+        String c2Ticker = analysis.getCompany2().getCompanyInfo().getTickerSymbol();
+
+        // Get most recent year data
+        YearlyFinancialData c1Data = analysis.getCompany1().getYearlyData().isEmpty() ?
+                null : analysis.getCompany1().getYearlyData().get(0);
+        YearlyFinancialData c2Data = analysis.getCompany2().getYearlyData().isEmpty() ?
+                null : analysis.getCompany2().getYearlyData().get(0);
+
+        if (c1Data == null || c2Data == null) {
+            return;
+        }
+
+        // Check if we have extended data with DOT information
+        DOTOnTimePerformance c1Perf = null;
+        DOTOnTimePerformance c2Perf = null;
+
+        if (c1Data instanceof YearlyFinancialDataExtended) {
+            c1Perf = ((YearlyFinancialDataExtended) c1Data).getPerformanceData();
+        }
+        if (c2Data instanceof YearlyFinancialDataExtended) {
+            c2Perf = ((YearlyFinancialDataExtended) c2Data).getPerformanceData();
+        }
+
+        if (c1Perf != null || c2Perf != null) {
+            printPerformanceMetricsTable(c1Ticker, c2Ticker, c1Perf, c2Perf);
+        }
+
+        // Additional operational data from DOT
+        if (c1Data instanceof YearlyFinancialDataExtended && c2Data instanceof YearlyFinancialDataExtended) {
+            YearlyFinancialDataExtended c1Ext = (YearlyFinancialDataExtended) c1Data;
+            YearlyFinancialDataExtended c2Ext = (YearlyFinancialDataExtended) c2Data;
+
+            if (c1Ext.hasDOTData() || c2Ext.hasDOTData()) {
+                printAdditionalDOTMetrics(c1Ticker, c2Ticker, c1Ext, c2Ext);
+            }
+        }
+
+        System.out.println();
+    }
+
+    /**
+     * Check if company has any DOT/BTS data
+     */
+    private boolean hasAnyDOTData(CompanyFinancialData company) {
+        for (YearlyFinancialData yearData : company.getYearlyData()) {
+            if (yearData instanceof YearlyFinancialDataExtended) {
+                YearlyFinancialDataExtended extended = (YearlyFinancialDataExtended) yearData;
+                if (extended.hasDOTData() || extended.hasPerformanceData()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Print performance metrics comparison table
+     */
+    private void printPerformanceMetricsTable(String ticker1, String ticker2,
+                                              DOTOnTimePerformance perf1,
+                                              DOTOnTimePerformance perf2) {
+        System.out.println();
+        System.out.println("ON-TIME PERFORMANCE & SERVICE QUALITY");
+        System.out.println(repeat("─", 79));
+
+        printComparativeLine("Metric", ticker1, ticker2, true);
+        System.out.println(repeat("─", 79));
+
+        // On-time performance
+        printComparativeLine("On-Time Performance %",
+                perf1 != null ? formatPercent(perf1.getOnTimePercentage()) : "N/A",
+                perf2 != null ? formatPercent(perf2.getOnTimePercentage()) : "N/A",
+                perf1 != null && perf2 != null ?
+                        (perf1.getOnTimePercentage().compareTo(perf2.getOnTimePercentage()) > 0) : null);
+
+        printComparativeLine("Cancellation Rate %",
+                perf1 != null ? formatPercent(perf1.getCancellationRate()) : "N/A",
+                perf2 != null ? formatPercent(perf2.getCancellationRate()) : "N/A",
+                perf1 != null && perf2 != null ?
+                        (perf1.getCancellationRate().compareTo(perf2.getCancellationRate()) < 0) : null);
+
+        printComparativeLine("Avg Arrival Delay (min)",
+                perf1 != null ? formatDecimal(perf1.getAverageArrivalDelay()) : "N/A",
+                perf2 != null ? formatDecimal(perf2.getAverageArrivalDelay()) : "N/A",
+                perf1 != null && perf2 != null && perf1.getAverageArrivalDelay() != null && perf2.getAverageArrivalDelay() != null ?
+                        (perf1.getAverageArrivalDelay().compareTo(perf2.getAverageArrivalDelay()) < 0) : null);
+
+        // Delay breakdown
+        System.out.println();
+        System.out.println("DELAY ANALYSIS (Total Minutes)");
+        System.out.println(repeat("─", 79));
+
+        printComparativeLine("Carrier Delays",
+                perf1 != null ? formatLargeNumber(perf1.getCarrierDelayMinutes()) : "N/A",
+                perf2 != null ? formatLargeNumber(perf2.getCarrierDelayMinutes()) : "N/A",
+                false);
+
+        printComparativeLine("Weather Delays",
+                perf1 != null ? formatLargeNumber(perf1.getWeatherDelayMinutes()) : "N/A",
+                perf2 != null ? formatLargeNumber(perf2.getWeatherDelayMinutes()) : "N/A",
+                false);
+
+        printComparativeLine("NAS Delays",
+                perf1 != null ? formatLargeNumber(perf1.getNasDelayMinutes()) : "N/A",
+                perf2 != null ? formatLargeNumber(perf2.getNasDelayMinutes()) : "N/A",
+                false);
+
+        // Baggage and complaints if available
+        if ((perf1 != null && perf1.getMishandledBaggage() != null) ||
+            (perf2 != null && perf2.getMishandledBaggage() != null)) {
+            System.out.println();
+            System.out.println("CUSTOMER SERVICE");
+            System.out.println(repeat("─", 79));
+
+            printComparativeLine("Mishandled Baggage Rate",
+                    perf1 != null && perf1.getMishandledBaggageRate() != null ?
+                            formatDecimal(perf1.getMishandledBaggageRate()) + " per 1K pax" : "N/A",
+                    perf2 != null && perf2.getMishandledBaggageRate() != null ?
+                            formatDecimal(perf2.getMishandledBaggageRate()) + " per 1K pax" : "N/A",
+                    perf1 != null && perf2 != null &&
+                    perf1.getMishandledBaggageRate() != null && perf2.getMishandledBaggageRate() != null ?
+                            (perf1.getMishandledBaggageRate().compareTo(perf2.getMishandledBaggageRate()) < 0) : null);
+
+            if ((perf1 != null && perf1.getComplaintRate() != null) ||
+                (perf2 != null && perf2.getComplaintRate() != null)) {
+                printComparativeLine("Complaint Rate",
+                        perf1 != null && perf1.getComplaintRate() != null ?
+                                formatDecimal(perf1.getComplaintRate()) + " per 100K pax" : "N/A",
+                        perf2 != null && perf2.getComplaintRate() != null ?
+                                formatDecimal(perf2.getComplaintRate()) + " per 100K pax" : "N/A",
+                        perf1 != null && perf2 != null &&
+                        perf1.getComplaintRate() != null && perf2.getComplaintRate() != null ?
+                                (perf1.getComplaintRate().compareTo(perf2.getComplaintRate()) < 0) : null);
+            }
+        }
+
+        System.out.println();
+        System.out.println("Data Source: DOT Bureau of Transportation Statistics");
+    }
+
+    /**
+     * Print additional DOT metrics (if available)
+     */
+    private void printAdditionalDOTMetrics(String ticker1, String ticker2,
+                                          YearlyFinancialDataExtended data1,
+                                          YearlyFinancialDataExtended data2) {
+        System.out.println();
+        System.out.println("ADDITIONAL DOT OPERATIONAL METRICS");
+        System.out.println(repeat("─", 79));
+
+        DOTOperationalData dot1 = data1.hasDOTData() ? data1.getDotData().getAnnualOperationalData() : null;
+        DOTOperationalData dot2 = data2.hasDOTData() ? data2.getDotData().getAnnualOperationalData() : null;
+
+        if (dot1 != null || dot2 != null) {
+            printComparativeLine("Metric", ticker1, ticker2, true);
+            System.out.println(repeat("─", 79));
+
+            // Domestic vs International breakdown (if available)
+            if ((dot1 != null && dot1.getDomesticPassengers() != null) ||
+                (dot2 != null && dot2.getDomesticPassengers() != null)) {
+                printComparativeLine("Domestic Passengers",
+                        dot1 != null && dot1.getDomesticPassengers() != null ?
+                                String.format("%,d", dot1.getDomesticPassengers()) : "N/A",
+                        dot2 != null && dot2.getDomesticPassengers() != null ?
+                                String.format("%,d", dot2.getDomesticPassengers()) : "N/A",
+                        false);
+
+                printComparativeLine("International Passengers",
+                        dot1 != null && dot1.getInternationalPassengers() != null ?
+                                String.format("%,d", dot1.getInternationalPassengers()) : "N/A",
+                        dot2 != null && dot2.getInternationalPassengers() != null ?
+                                String.format("%,d", dot2.getInternationalPassengers()) : "N/A",
+                        false);
+            }
+        }
+    }
+
+    /**
+     * Helper method to print comparative line with color coding
+     */
+    private void printComparativeLine(String label, String value1, String value2, Boolean company1Better) {
+        if (company1Better == null) {
+            // Header or no comparison available
+            System.out.printf("%-40s %18s %18s%n", label, value1, value2);
+        } else {
+            if (company1Better) {
+                System.out.printf("%-40s %s %18s%n",
+                        label,
+                        ansi().fg(Ansi.Color.GREEN).a(String.format("%18s", value1)).reset(),
+                        value2);
+            } else {
+                System.out.printf("%-40s %18s %s%n",
+                        label,
+                        value1,
+                        ansi().fg(Ansi.Color.GREEN).a(String.format("%18s", value2)).reset());
+            }
+        }
+    }
+
+    /**
      * Level 2: Detailed Financial View
      * Full financial statements with 3-year trends
      */
@@ -964,6 +1183,10 @@ public class ConsoleReportGenerator {
         printSideBySideComparison(analysis);
         printStrengthsAndWeaknesses(analysis);
         printAirlineSpecificAnalysis(analysis);
+
+        // NEW: Show DOT/BTS performance comparison if available
+        printDOTPerformanceComparison(analysis);
+
         printRedFlags(analysis);
         printRecommendations(analysis);
         printFooter();
