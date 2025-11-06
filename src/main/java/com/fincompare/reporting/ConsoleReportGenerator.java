@@ -544,17 +544,17 @@ public class ConsoleReportGenerator {
         YearlyFinancialData c2Latest = analysis.getCompany2().getYearlyData().get(0);
         String year = c1Latest.getFiscalYear();
 
-        // Box header
+        // Box header (ASCII for Windows compatibility)
         System.out.println();
-        System.out.println("╔════════════════════════════════════════════════════════════════════════════╗");
-        String title = String.format("AIRLINE FINANCIAL COMPARISON: %s vs %s (FY %s)", c1Ticker, c2Ticker, year);
-        System.out.println("║" + centerText(title, 76) + "║");
-        System.out.println("╚════════════════════════════════════════════════════════════════════════════╝");
+        System.out.println("+============================================================================+");
+        String title = String.format(" AIRLINE FINANCIAL COMPARISON: %s vs %s (FY %s) ", c1Ticker, c2Ticker, year);
+        System.out.println("|" + centerText(title, 76) + "|");
+        System.out.println("+============================================================================+");
         System.out.println();
 
         // Bottom line summary
-        System.out.println("📊 BOTTOM LINE");
-        System.out.println(repeat("─", 77));
+        System.out.println("BOTTOM LINE");
+        System.out.println(repeat("-", 77));
         String bottomLine = generateBottomLine(analysis);
         System.out.println(bottomLine);
         System.out.println();
@@ -562,16 +562,16 @@ public class ConsoleReportGenerator {
         // Data quality notice
         int missingCount = countMissingMetrics(analysis);
         if (missingCount > 0) {
-            System.out.println(colorize("⚠️  DATA QUALITY: " + missingCount + " metrics unavailable (see --data-quality for details)", Ansi.Color.YELLOW));
+            System.out.println(colorize("WARNING: " + missingCount + " metrics unavailable (see --data-quality for details)", Ansi.Color.YELLOW));
             System.out.println();
         }
 
-        System.out.println(repeat("━", 77));
+        System.out.println(repeat("=", 77));
         System.out.println();
 
         // Key metrics snapshot table
-        System.out.println(String.format("%-43s %15s %15s %10s", "KEY METRICS SNAPSHOT", c1Ticker, c2Ticker, "Δ%"));
-        System.out.println(repeat("─", 77));
+        System.out.println(String.format("%-43s %15s %15s %10s", "KEY METRICS SNAPSHOT", c1Ticker, c2Ticker, "Delta%"));
+        System.out.println(repeat("-", 77));
 
         printMetricRow("Revenue (billions)", formatBillions(c1Latest.getIncomeStatement().getTotalRevenue()),
                 formatBillions(c2Latest.getIncomeStatement().getTotalRevenue()),
@@ -611,21 +611,21 @@ public class ConsoleReportGenerator {
 
         // Competitive position
         System.out.println("COMPETITIVE POSITION");
-        System.out.println(repeat("─", 77));
+        System.out.println(repeat("-", 77));
         List<String> c1Strengths = analysis.getCompany1Strengths();
         List<String> c2Weaknesses = analysis.getCompany2Weaknesses();
 
         if (!c1Strengths.isEmpty()) {
-            System.out.println(colorize("✓ " + c1Ticker + ": " + String.join(", ", c1Strengths.subList(0, Math.min(2, c1Strengths.size()))), Ansi.Color.GREEN));
+            System.out.println(colorize("[+] " + c1Ticker + ": " + String.join(", ", c1Strengths.subList(0, Math.min(2, c1Strengths.size()))), Ansi.Color.GREEN));
         }
         if (!c2Weaknesses.isEmpty()) {
-            System.out.println(colorize("✗ " + c2Ticker + ": " + String.join(", ", c2Weaknesses.subList(0, Math.min(2, c2Weaknesses.size()))), Ansi.Color.RED));
+            System.out.println(colorize("[-] " + c2Ticker + ": " + String.join(", ", c2Weaknesses.subList(0, Math.min(2, c2Weaknesses.size()))), Ansi.Color.RED));
         }
 
         System.out.println();
-        System.out.println(repeat("━", 77));
+        System.out.println(repeat("=", 77));
         System.out.println();
-        System.out.println("💡 Use --detail for full financials | --ops for operational deep-dive");
+        System.out.println("TIP: Use --detail for full financials | --ops for operational deep-dive");
         System.out.println();
     }
 
@@ -634,9 +634,9 @@ public class ConsoleReportGenerator {
      * Full financial statements with 3-year trends
      */
     private void printDetailedFinancialView(ComparativeAnalysis analysis) {
-        System.out.println("═══════════════════════════════════════════════════════════════════════════");
+        System.out.println("===========================================================================");
         System.out.println("                         FINANCIAL STATEMENTS");
-        System.out.println("═══════════════════════════════════════════════════════════════════════════");
+        System.out.println("===========================================================================");
         System.out.println();
 
         // This will show the existing detailed multi-year view
@@ -655,9 +655,9 @@ public class ConsoleReportGenerator {
      * Unit economics, fleet details, DOT metrics
      */
     private void printOperationalDeepDive(ComparativeAnalysis analysis) {
-        System.out.println("═══════════════════════════════════════════════════════════════════════════");
+        System.out.println("===========================================================================");
         System.out.println("                      OPERATIONAL PERFORMANCE ANALYSIS");
-        System.out.println("═══════════════════════════════════════════════════════════════════════════");
+        System.out.println("===========================================================================");
         System.out.println();
 
         System.out.println("Note: Full operational deep-dive with DOT metrics, fleet composition,");
@@ -669,11 +669,11 @@ public class ConsoleReportGenerator {
         printAirlineSpecificAnalysis(analysis);
 
         System.out.println();
-        System.out.println("ℹ️  For complete operational analysis including:");
-        System.out.println("   • DOT on-time performance, cancellations, baggage");
-        System.out.println("   • Fleet age, ownership structure, order book");
-        System.out.println("   • Stage-length adjusted CASM");
-        System.out.println("   • Fuel economics and hedge positions");
+        System.out.println("INFO: For complete operational analysis including:");
+        System.out.println("   - DOT on-time performance, cancellations, baggage");
+        System.out.println("   - Fleet age, ownership structure, order book");
+        System.out.println("   - Stage-length adjusted CASM");
+        System.out.println("   - Fuel economics and hedge positions");
         System.out.println();
         System.out.println("   Additional data integration required (future enhancement)");
         System.out.println();
@@ -684,9 +684,9 @@ public class ConsoleReportGenerator {
      * Sources, validation, imputation details
      */
     private void printDataQualityReport(ComparativeAnalysis analysis) {
-        System.out.println("═══════════════════════════════════════════════════════════════════════════");
+        System.out.println("===========================================================================");
         System.out.println("                          DATA QUALITY REPORT");
-        System.out.println("═══════════════════════════════════════════════════════════════════════════");
+        System.out.println("===========================================================================");
         System.out.println();
 
         String c1Ticker = analysis.getCompany1().getCompanyInfo().getTickerSymbol();

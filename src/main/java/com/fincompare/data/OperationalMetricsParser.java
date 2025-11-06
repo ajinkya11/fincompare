@@ -64,22 +64,35 @@ public class OperationalMetricsParser {
         try {
             Document doc = Jsoup.parse(htmlContent);
 
-            // Extract text from the document (focusing on tables and paragraphs)
-            String text = doc.body().text();
+            // Strategy 1: Look for operational statistics tables
+            BigDecimal asm = extractFromTables(doc, "ASM");
+            BigDecimal rpm = extractFromTables(doc, "RPM");
+            BigDecimal loadFactor = extractLoadFactorFromTables(doc);
+            Long passengers = extractPassengersFromTables(doc);
 
-            // Also extract from tables which often contain operational data
-            Elements tables = doc.select("table");
-            StringBuilder tableText = new StringBuilder();
-            for (Element table : tables) {
-                tableText.append(table.text()).append(" ");
+            // Strategy 2: Fallback to text extraction if table extraction failed
+            if (asm == null || rpm == null) {
+                logger.info("Table extraction incomplete, falling back to text pattern matching");
+                String fullText = doc.body().text();
+
+                if (asm == null) {
+                    asm = extractMetric(fullText, ASM_PATTERNS, "ASM");
+                }
+                if (rpm == null) {
+                    rpm = extractMetric(fullText, RPM_PATTERNS, "RPM");
+                }
+                if (loadFactor == null) {
+                    loadFactor = extractLoadFactor(fullText);
+                }
+                if (passengers == null) {
+                    passengers = extractPassengers(fullText);
+                }
             }
-            String fullText = text + " " + tableText.toString();
 
-            // Extract metrics using patterns
-            data.setAvailableSeatMiles(extractMetric(fullText, ASM_PATTERNS, "ASM"));
-            data.setRevenuePassengerMiles(extractMetric(fullText, RPM_PATTERNS, "RPM"));
-            data.setLoadFactor(extractLoadFactor(fullText));
-            data.setPassengersCarried(extractPassengers(fullText));
+            data.setAvailableSeatMiles(asm);
+            data.setRevenuePassengerMiles(rpm);
+            data.setLoadFactor(loadFactor);
+            data.setPassengersCarried(passengers);
 
             // Log what we found
             logger.info("Extracted metrics - ASM: {}, RPM: {}, Load Factor: {}, Passengers: {}",
@@ -92,6 +105,167 @@ public class OperationalMetricsParser {
             logger.error("Error parsing operational metrics", e);
             return data;
         }
+    }
+
+    /**
+     * Extract metrics from tables (more reliable than free text)
+     */
+    private BigDecimal extractFromTables(Document doc, String metricType) {
+        Elements tables = doc.select("table");
+        logger.info("Searching {} tables for {} data", tables.size(), metricType);
+
+        String[] searchTerms = metricType.equals("ASM")
+            ? new String[]{"available seat miles", "asm", "capacity"}
+            : new String[]{"revenue passenger miles", "rpm", "traffic"};
+
+        for (Element table : tables) {
+            // Check if this table contains operational statistics
+            String tableText = table.text().toLowerCase();
+            if (!tableText.contains("seat miles") && !tableText.contains("operational")) {
+                continue;
+            }
+
+            // Search table rows for the metric
+            Elements rows = table.select("tr");
+            for (Element row : rows) {
+                String rowText = row.text().toLowerCase();
+
+                // Check if this row contains our metric
+                boolean matches = false;
+                for (String term : searchTerms) {
+                    if (rowText.contains(term)) {
+                        matches = true;
+                        break;
+                    }
+                }
+
+                if (matches) {
+                    // Extract the number from this row
+                    Elements cells = row.select("td, th");
+                    for (int i = 0; i < cells.size(); i++) {
+                        String cellText = cells.get(i).text();
+                        BigDecimal value = parseNumber(cellText);
+                        if (value != null && value.compareTo(new BigDecimal("10")) > 0) {
+                            // Found a reasonable number
+                            logger.info("Found {} in table: {} from row: {}", metricType, value, rowText.substring(0, Math.min(100, rowText.length())));
+
+                            // Determine if it's in millions or billions based on context
+                            if (rowText.contains("billion") || rowText.contains("(b)")) {
+                                value = value.multiply(new BigDecimal("1000"));
+                                logger.info("Converting from billions to millions: {}", value);
+                            } else if (rowText.contains("million") || rowText.contains("(m)") || value.compareTo(new BigDecimal("1000")) > 0) {
+                                // Already in millions or large number assumed to be millions
+                                logger.info("Value assumed to be in millions: {}", value);
+                            }
+
+                            return value;
+                        }
+                    }
+                }
+            }
+        }
+
+        logger.warn("Could not find {} in any table", metricType);
+        return null;
+    }
+
+    /**
+     * Extract load factor from tables
+     */
+    private BigDecimal extractLoadFactorFromTables(Document doc) {
+        Elements tables = doc.select("table");
+
+        for (Element table : tables) {
+            String tableText = table.text().toLowerCase();
+            if (!tableText.contains("load factor")) {
+                continue;
+            }
+
+            Elements rows = table.select("tr");
+            for (Element row : rows) {
+                String rowText = row.text().toLowerCase();
+                if (rowText.contains("load factor") || rowText.contains("passenger load")) {
+                    // Look for percentage in this row
+                    Pattern percentPattern = Pattern.compile("(\\d{1,3}\\.\\d{1,2})\\s*%");
+                    Matcher matcher = percentPattern.matcher(row.text());
+                    if (matcher.find()) {
+                        BigDecimal value = new BigDecimal(matcher.group(1));
+                        logger.info("Found Load Factor in table: {}%", value);
+                        return value;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract passengers from tables
+     */
+    private Long extractPassengersFromTables(Document doc) {
+        Elements tables = doc.select("table");
+
+        for (Element table : tables) {
+            String tableText = table.text().toLowerCase();
+            if (!tableText.contains("passenger")) {
+                continue;
+            }
+
+            Elements rows = table.select("tr");
+            for (Element row : rows) {
+                String rowText = row.text().toLowerCase();
+                if (rowText.contains("passengers") && (rowText.contains("carried") || rowText.contains("enplaned"))) {
+                    Elements cells = row.select("td, th");
+                    for (Element cell : cells) {
+                        String cellText = cell.text().replace(",", "").replace(" ", "");
+                        try {
+                            // Look for numbers in millions
+                            Pattern numberPattern = Pattern.compile("(\\d+(?:\\.\\d+)?)");
+                            Matcher matcher = numberPattern.matcher(cellText);
+                            if (matcher.find()) {
+                                double value = Double.parseDouble(matcher.group(1));
+                                if (value > 1 && value < 1000) {
+                                    // Likely in millions
+                                    return (long)(value * 1_000_000);
+                                }
+                            }
+                        } catch (Exception e) {
+                            // Continue searching
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Parse a number from text, handling commas and decimals
+     */
+    private BigDecimal parseNumber(String text) {
+        try {
+            // Remove everything except digits, commas, and decimal points
+            String cleaned = text.replaceAll("[^0-9,.]", "");
+            if (cleaned.isEmpty()) {
+                return null;
+            }
+
+            // Remove commas
+            cleaned = cleaned.replace(",", "");
+
+            // Parse
+            BigDecimal value = new BigDecimal(cleaned);
+
+            // Sanity check - must be positive and reasonable
+            if (value.compareTo(BigDecimal.ZERO) > 0 && value.compareTo(new BigDecimal("1000000")) < 0) {
+                return value;
+            }
+        } catch (Exception e) {
+            // Not a valid number
+        }
+        return null;
     }
 
     /**
