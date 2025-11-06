@@ -3,6 +3,7 @@ package com.fincompare.reporting;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fincompare.models.ComparativeAnalysis;
+import com.fincompare.models.CompanyFinancialData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,17 @@ public class JSONExporter {
         logger.info("Exporting comparative analysis to JSON: {}", outputPath);
 
         objectMapper.writeValue(new File(outputPath), analysis);
+
+        logger.info("JSON export completed successfully");
+    }
+
+    /**
+     * Export company financial data to JSON format
+     */
+    public void exportCompanyData(CompanyFinancialData companyData, String outputPath) throws IOException {
+        logger.info("Exporting company data to JSON: {}", outputPath);
+
+        objectMapper.writeValue(new File(outputPath), companyData);
 
         logger.info("JSON export completed successfully");
     }

@@ -1,5 +1,6 @@
 package com.fincompare.analysis;
 
+import com.fincompare.data.DataIntegrationService;
 import com.fincompare.data.SECEdgarClient;
 import com.fincompare.data.XBRLParser;
 import com.fincompare.metrics.AirlineMetricsCalculator;
@@ -10,6 +11,7 @@ import com.fincompare.util.FileCache;
 import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -22,17 +24,23 @@ public class FinancialAnalysisService {
     private final XBRLParser xbrlParser;
     private final FinancialMetricsCalculator metricsCalculator;
     private final AirlineMetricsCalculator airlineMetricsCalculator;
+    private final DataIntegrationService dataIntegrationService;
     private final FileCache cache;
+
+    @Value("${dot.bts.enabled:true}")
+    private boolean dotBtsEnabled;
 
     public FinancialAnalysisService(SECEdgarClient secClient,
                                    XBRLParser xbrlParser,
                                    FinancialMetricsCalculator metricsCalculator,
                                    AirlineMetricsCalculator airlineMetricsCalculator,
+                                   DataIntegrationService dataIntegrationService,
                                    FileCache cache) {
         this.secClient = secClient;
         this.xbrlParser = xbrlParser;
         this.metricsCalculator = metricsCalculator;
         this.airlineMetricsCalculator = airlineMetricsCalculator;
+        this.dataIntegrationService = dataIntegrationService;
         this.cache = cache;
     }
 
@@ -66,6 +74,19 @@ public class FinancialAnalysisService {
 
         // Parse financial data
         CompanyFinancialData companyData = xbrlParser.parseCompanyFacts(companyFactsJson, ticker, years);
+
+        // Enhance with DOT/BTS data if enabled
+        if (dotBtsEnabled) {
+            try {
+                logger.info("Enhancing with DOT/BTS operational and performance data");
+                dataIntegrationService.enhanceWithDOTData(companyData, ticker);
+
+                // Validate data consistency across sources
+                dataIntegrationService.validateDataConsistency(companyData);
+            } catch (Exception e) {
+                logger.warn("Failed to enhance with DOT/BTS data: {}. Continuing with 10-K data only.", e.getMessage());
+            }
+        }
 
         // Calculate metrics for each year
         for (int i = 0; i < companyData.getYearlyData().size(); i++) {
