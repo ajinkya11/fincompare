@@ -585,26 +585,26 @@ public class ConsoleReportGenerator {
                 formatPercent(c2Latest.getMetrics().getNetMargin()),
                 calculatePercentageDelta(c2Latest.getMetrics().getNetMargin(), c1Latest.getMetrics().getNetMargin()));
 
-        // Airline-specific metrics
-        AirlineMetrics c1AirlineMetrics = c1Latest.getAirlineMetrics();
-        AirlineMetrics c2AirlineMetrics = c2Latest.getAirlineMetrics();
+        // Airline-specific metrics from operational data
+        AirlineOperationalData c1OpData = c1Latest.getOperationalData();
+        AirlineOperationalData c2OpData = c2Latest.getOperationalData();
 
-        if (c1AirlineMetrics != null && c2AirlineMetrics != null) {
-            printMetricRow("RASM (¢)", formatCents(c1AirlineMetrics.getRasm()),
-                    formatCents(c2AirlineMetrics.getRasm()),
-                    calculateDelta(c2AirlineMetrics.getRasm(), c1AirlineMetrics.getRasm()));
+        if (c1OpData != null && c2OpData != null) {
+            printMetricRow("RASM (¢)", formatCents(c1OpData.getRasm()),
+                    formatCents(c2OpData.getRasm()),
+                    calculateDelta(c2OpData.getRasm(), c1OpData.getRasm()));
 
-            printMetricRow("CASM (¢)", formatCents(c1AirlineMetrics.getCasm()),
-                    formatCents(c2AirlineMetrics.getCasm()),
-                    calculateDelta(c2AirlineMetrics.getCasm(), c1AirlineMetrics.getCasm()));
+            printMetricRow("CASM (¢)", formatCents(c1OpData.getCasm()),
+                    formatCents(c2OpData.getCasm()),
+                    calculateDelta(c2OpData.getCasm(), c1OpData.getCasm()));
 
-            printMetricRow("CASM-ex fuel (¢)", formatCents(c1AirlineMetrics.getCasmExFuel()),
-                    formatCents(c2AirlineMetrics.getCasmExFuel()),
-                    calculateDelta(c2AirlineMetrics.getCasmExFuel(), c1AirlineMetrics.getCasmExFuel()));
+            printMetricRow("CASM-ex fuel (¢)", formatCents(c1OpData.getCasmEx()),
+                    formatCents(c2OpData.getCasmEx()),
+                    calculateDelta(c2OpData.getCasmEx(), c1OpData.getCasmEx()));
 
-            printMetricRow("Load Factor", formatPercent(c1Latest.getOperationalData().getPassengerLoadFactor()),
-                    formatPercent(c2Latest.getOperationalData().getPassengerLoadFactor()),
-                    calculatePercentageDelta(c2Latest.getOperationalData().getPassengerLoadFactor(), c1Latest.getOperationalData().getPassengerLoadFactor()));
+            printMetricRow("Load Factor", formatPercent(c1OpData.getPassengerLoadFactor()),
+                    formatPercent(c2OpData.getPassengerLoadFactor()),
+                    calculatePercentageDelta(c2OpData.getPassengerLoadFactor(), c1OpData.getPassengerLoadFactor()));
         }
 
         System.out.println();
@@ -612,14 +612,14 @@ public class ConsoleReportGenerator {
         // Competitive position
         System.out.println("COMPETITIVE POSITION");
         System.out.println(repeat("─", 77));
-        List<String> c1Strengths = analysis.getKeyStrengths();
-        List<String> c2Strengths = analysis.getKeyWeaknesses(); // Inverse for c2
+        List<String> c1Strengths = analysis.getCompany1Strengths();
+        List<String> c2Weaknesses = analysis.getCompany2Weaknesses();
 
         if (!c1Strengths.isEmpty()) {
             System.out.println(colorize("✓ " + c1Ticker + ": " + String.join(", ", c1Strengths.subList(0, Math.min(2, c1Strengths.size()))), Ansi.Color.GREEN));
         }
-        if (!c2Strengths.isEmpty()) {
-            System.out.println(colorize("✗ " + c2Ticker + ": " + String.join(", ", c2Strengths.subList(0, Math.min(2, c2Strengths.size()))), Ansi.Color.RED));
+        if (!c2Weaknesses.isEmpty()) {
+            System.out.println(colorize("✗ " + c2Ticker + ": " + String.join(", ", c2Weaknesses.subList(0, Math.min(2, c2Weaknesses.size()))), Ansi.Color.RED));
         }
 
         System.out.println();
@@ -758,8 +758,8 @@ public class ConsoleReportGenerator {
         String c2Name = analysis.getCompany2().getCompanyInfo().getCompanyName();
 
         // Simple bottom line based on strengths count
-        int c1Strengths = analysis.getKeyStrengths().size();
-        int c2Weaknesses = analysis.getKeyWeaknesses().size();
+        int c1Strengths = analysis.getCompany1Strengths().size();
+        int c2Weaknesses = analysis.getCompany2Weaknesses().size();
 
         if (c1Strengths > c2Weaknesses) {
             return String.format("%s outperforms on most financial metrics with stronger profitability\nand better unit economics compared to %s.", c1Name, c2Name);
