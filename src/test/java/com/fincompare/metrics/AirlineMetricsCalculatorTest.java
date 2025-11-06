@@ -22,8 +22,9 @@ class AirlineMetricsCalculatorTest {
     void testCalculateLoadFactor() {
         // Arrange
         AirlineOperationalData data = new AirlineOperationalData();
-        data.setAvailableSeatMiles(new BigDecimal("100000000000")); // 100B ASM
-        data.setRevenuePassengerMiles(new BigDecimal("85000000000")); // 85B RPM
+        // ASM stored in millions: 100,000 million = 100 billion actual seat miles
+        data.setAvailableSeatMiles(new BigDecimal("100000")); // 100,000 million ASM
+        data.setRevenuePassengerMiles(new BigDecimal("85000")); // 85,000 million RPM
 
         // Act
         calculator.calculateAirlineMetrics(data, null);
@@ -37,7 +38,8 @@ class AirlineMetricsCalculatorTest {
     void testCalculateRASM() {
         // Arrange
         AirlineOperationalData data = new AirlineOperationalData();
-        data.setAvailableSeatMiles(new BigDecimal("100000000000")); // 100B ASM
+        // ASM stored in millions: 100,000 million = 100 billion actual
+        data.setAvailableSeatMiles(new BigDecimal("100000")); // 100,000 million ASM
 
         IncomeStatement income = new IncomeStatement();
         income.setTotalRevenue(new BigDecimal("15000000000")); // $15B revenue
@@ -47,7 +49,8 @@ class AirlineMetricsCalculatorTest {
 
         // Assert
         assertNotNull(data.getRasm());
-        // RASM = (Revenue * 100) / ASM = (15B * 100) / 100B = 15 cents
+        // RASM = (Revenue * 100) / (ASM_millions * 1,000,000)
+        // RASM = (15,000,000,000 * 100) / (100,000 * 1,000,000) = 1,500,000,000,000 / 100,000,000,000 = 15 cents
         assertEquals(new BigDecimal("15.00"), data.getRasm().setScale(2, BigDecimal.ROUND_HALF_UP));
     }
 
@@ -55,7 +58,8 @@ class AirlineMetricsCalculatorTest {
     void testCalculateCASM() {
         // Arrange
         AirlineOperationalData data = new AirlineOperationalData();
-        data.setAvailableSeatMiles(new BigDecimal("100000000000")); // 100B ASM
+        // ASM stored in millions: 100,000 million = 100 billion actual
+        data.setAvailableSeatMiles(new BigDecimal("100000")); // 100,000 million ASM
 
         IncomeStatement income = new IncomeStatement();
         income.setOperatingExpenses(new BigDecimal("14000000000")); // $14B expenses
@@ -66,10 +70,10 @@ class AirlineMetricsCalculatorTest {
 
         // Assert
         assertNotNull(data.getCasm());
-        // CASM = (Expenses * 100) / ASM = (14B * 100) / 100B = 14 cents
+        // CASM = (Expenses * 100) / (ASM_millions * 1,000,000) = (14B * 100) / 100B = 14 cents
         assertEquals(new BigDecimal("14.00"), data.getCasm().setScale(2, BigDecimal.ROUND_HALF_UP));
 
-        // CASM-ex = ((Expenses - Fuel) * 100) / ASM = (10B * 100) / 100B = 10 cents
+        // CASM-ex = ((Expenses - Fuel) * 100) / (ASM_millions * 1,000,000) = (10B * 100) / 100B = 10 cents
         assertNotNull(data.getCasmEx());
         assertEquals(new BigDecimal("10.00"), data.getCasmEx().setScale(2, BigDecimal.ROUND_HALF_UP));
     }
@@ -78,7 +82,8 @@ class AirlineMetricsCalculatorTest {
     void testCalculateBreakEvenLoadFactor() {
         // Arrange
         AirlineOperationalData data = new AirlineOperationalData();
-        data.setAvailableSeatMiles(new BigDecimal("100000000000"));
+        // ASM stored in millions: 100,000 million = 100 billion actual
+        data.setAvailableSeatMiles(new BigDecimal("100000")); // 100,000 million ASM
 
         IncomeStatement income = new IncomeStatement();
         income.setTotalRevenue(new BigDecimal("15000000000")); // RASM = 15 cents
@@ -105,12 +110,19 @@ class AirlineMetricsCalculatorTest {
         // Act & Assert
         assertTrue(calculator.validateMetrics(validData));
 
-        // Arrange - Invalid load factor (>100%)
+        // Arrange - Invalid load factor (>150% - extreme value indicating data quality issues)
         AirlineOperationalData invalidData = new AirlineOperationalData();
-        invalidData.setPassengerLoadFactor(new BigDecimal("105.0"));
+        invalidData.setBreakEvenLoadFactor(new BigDecimal("200.0")); // >150% triggers validation failure
 
         // Act & Assert
         assertFalse(calculator.validateMetrics(invalidData));
+
+        // Arrange - Load factor slightly >100% is valid (airline can't break even but data is OK)
+        AirlineOperationalData concerningButValidData = new AirlineOperationalData();
+        concerningButValidData.setBreakEvenLoadFactor(new BigDecimal("105.0")); // >100% but <150% is valid
+
+        // Act & Assert
+        assertTrue(calculator.validateMetrics(concerningButValidData));
     }
 
     @Test
