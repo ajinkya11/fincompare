@@ -132,4 +132,8 @@ public class AirlineOperationalData {
 
     public BigDecimal getAverageSalary() { return averageSalary; }
     public void setAverageSalary(BigDecimal averageSalary) { this.averageSalary = averageSalary; }
+
+    // Convenience methods for load factor (maps to passenger load factor)
+    public BigDecimal getLoadFactor() { return passengerLoadFactor; }
+    public void setLoadFactor(BigDecimal loadFactor) { this.passengerLoadFactor = loadFactor; }
 }
