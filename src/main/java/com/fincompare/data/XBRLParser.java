@@ -173,7 +173,10 @@ public class XBRLParser {
                         // Parse operational metrics
                         AirlineOperationalData opMetrics = operationalMetricsParser.parseOperationalMetrics(htmlContent, filingYear);
 
-                        // Find the corresponding yearly data and merge operational metrics
+                        // Extract revenue from HTML to validate XBRL data
+                        BigDecimal htmlRevenue = operationalMetricsParser.extractRevenueFromHTML(htmlContent, filingYear);
+
+                        // Find the corresponding yearly data and merge operational metrics + validate revenue
                         for (YearlyFinancialData yearlyData : companyData.getYearlyData()) {
                             if (yearlyData.getFiscalYear().equals(filingYear)) {
                                 // Merge: keep XBRL data if present, otherwise use 10-K parsed data
@@ -183,11 +186,50 @@ public class XBRLParser {
                                 } else {
                                     yearlyData.setOperationalData(opMetrics);
                                 }
+
+                                // Validate and correct revenue if needed
+                                if (htmlRevenue != null) {
+                                    BigDecimal xbrlRevenue = yearlyData.getIncomeStatement().getTotalRevenue();
+                                    if (xbrlRevenue != null) {
+                                        // Calculate percentage difference
+                                        BigDecimal diff = htmlRevenue.subtract(xbrlRevenue).abs();
+                                        BigDecimal percentDiff = diff.divide(htmlRevenue, 4, BigDecimal.ROUND_HALF_UP)
+                                                .multiply(new BigDecimal("100"));
+
+                                        if (percentDiff.compareTo(new BigDecimal("20")) > 0) {
+                                            logger.warn("Revenue mismatch for FY{}: XBRL={}, HTML={}, diff={}%. Using HTML value.",
+                                                filingYear, xbrlRevenue, htmlRevenue, percentDiff.setScale(1, BigDecimal.ROUND_HALF_UP));
+                                            yearlyData.getIncomeStatement().setTotalRevenue(htmlRevenue);
+
+                                            // Recalculate gross profit with corrected revenue
+                                            if (yearlyData.getIncomeStatement().getOperatingExpenses() != null) {
+                                                BigDecimal grossProfit = htmlRevenue.subtract(
+                                                    yearlyData.getIncomeStatement().getOperatingExpenses());
+                                                yearlyData.getIncomeStatement().setGrossProfit(grossProfit);
+                                            }
+                                        } else {
+                                            logger.info("Revenue validated for FY{}: XBRL={}, HTML={}, diff={}%",
+                                                filingYear, xbrlRevenue, htmlRevenue, percentDiff.setScale(1, BigDecimal.ROUND_HALF_UP));
+                                        }
+                                    } else {
+                                        // No XBRL revenue, use HTML revenue
+                                        logger.info("No XBRL revenue for FY{}, using HTML value: {}", filingYear, htmlRevenue);
+                                        yearlyData.getIncomeStatement().setTotalRevenue(htmlRevenue);
+
+                                        // Calculate gross profit
+                                        if (yearlyData.getIncomeStatement().getOperatingExpenses() != null) {
+                                            BigDecimal grossProfit = htmlRevenue.subtract(
+                                                yearlyData.getIncomeStatement().getOperatingExpenses());
+                                            yearlyData.getIncomeStatement().setGrossProfit(grossProfit);
+                                        }
+                                    }
+                                }
+
                                 break;
                             }
                         }
 
-                        logger.info("Successfully enriched FY{} with operational metrics", filingYear);
+                        logger.info("Successfully enriched FY{} with operational metrics and validated revenue", filingYear);
 
                     } catch (Exception e) {
                         logger.warn("Failed to process 10-K filing for FY{}: {}", filingYear, e.getMessage());
