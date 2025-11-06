@@ -21,18 +21,21 @@ public class OperationalMetricsParser {
     private static final Logger logger = LoggerFactory.getLogger(OperationalMetricsParser.class);
 
     // Regex patterns for extracting operational metrics
-    // ASM patterns (Available Seat Miles)
+    // ASM patterns (Available Seat Miles) - improved to match full numbers
     private static final Pattern[] ASM_PATTERNS = {
-            Pattern.compile("available\\s+seat\\s+miles.*?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*(million|billion)?", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("ASMs?.*?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*(million|billion)?", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("capacity.*?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*(million|billion)?.*?ASM", Pattern.CASE_INSENSITIVE)
+            // Match "Available seat miles (millions)    339,534" or "ASM    174.5 billion"
+            Pattern.compile("(?:available\\s+seat\\s+miles|ASMs?)\\s*(?:\\(millions?\\))?[\\s:]*[\\-–—]*\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\s*(million|billion|thousands?)?", Pattern.CASE_INSENSITIVE),
+            // Fallback: number followed by million/billion then ASM/available seat miles
+            Pattern.compile("(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\s*(million|billion)\\s+(?:available\\s+seat\\s+miles|ASMs?)", Pattern.CASE_INSENSITIVE),
+            // In tables: ASM label in one cell, number in adjacent cell
+            Pattern.compile("(?:ASMs?|available\\s+seat\\s+miles)[^\\d]{0,50}(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d{3,})", Pattern.CASE_INSENSITIVE)
     };
 
-    // RPM patterns (Revenue Passenger Miles)
+    // RPM patterns (Revenue Passenger Miles) - improved to match full numbers
     private static final Pattern[] RPM_PATTERNS = {
-            Pattern.compile("revenue\\s+passenger\\s+miles.*?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*(million|billion)?", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("RPMs?.*?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*(million|billion)?", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("traffic.*?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*(million|billion)?.*?RPM", Pattern.CASE_INSENSITIVE)
+            Pattern.compile("(?:revenue\\s+passenger\\s+miles|RPMs?)\\s*(?:\\(millions?\\))?[\\s:]*[\\-–—]*\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\s*(million|billion|thousands?)?", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\s*(million|billion)\\s+(?:revenue\\s+passenger\\s+miles|RPMs?)", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("(?:RPMs?|revenue\\s+passenger\\s+miles)[^\\d]{0,50}(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d{3,})", Pattern.CASE_INSENSITIVE)
     };
 
     // Load Factor patterns
@@ -93,26 +96,36 @@ public class OperationalMetricsParser {
 
     /**
      * Extract a metric using multiple regex patterns
+     * Returns value in millions (standard unit for ASM/RPM)
      */
     private BigDecimal extractMetric(String text, Pattern[] patterns, String metricName) {
         for (Pattern pattern : patterns) {
             Matcher matcher = pattern.matcher(text);
             if (matcher.find()) {
                 try {
-                    String numberStr = matcher.group(1).replace(",", "");
+                    String numberStr = matcher.group(1).replace(",", "").replace(" ", "");
                     BigDecimal value = new BigDecimal(numberStr);
 
-                    // Check for unit multiplier
+                    // Check for unit multiplier and convert to millions
                     if (matcher.groupCount() >= 2 && matcher.group(2) != null) {
                         String unit = matcher.group(2).toLowerCase();
                         if (unit.contains("billion")) {
-                            value = value.multiply(new BigDecimal("1000")); // Convert to millions
+                            value = value.multiply(new BigDecimal("1000")); // Convert billions to millions
                         } else if (unit.contains("thousand")) {
-                            value = value.divide(new BigDecimal("1000"), 2, BigDecimal.ROUND_HALF_UP); // Convert to millions
+                            value = value.divide(new BigDecimal("1000"), 2, BigDecimal.ROUND_HALF_UP); // Convert thousands to millions
+                        }
+                        // If unit is "million" or no unit, value is already in millions
+                    } else {
+                        // No explicit unit - if the number is > 1000, assume it's already in millions
+                        // If < 1000 and we're looking for ASM/RPM, it might be in billions
+                        if (value.compareTo(new BigDecimal("1000")) < 0 && (metricName.equals("ASM") || metricName.equals("RPM"))) {
+                            // Small number like 174.5 without unit likely means billions
+                            logger.debug("Assuming {} value {} is in billions, converting to millions", metricName, value);
+                            value = value.multiply(new BigDecimal("1000"));
                         }
                     }
 
-                    logger.debug("Found {} value: {}", metricName, value);
+                    logger.debug("Found {} value: {} million", metricName, value);
                     return value;
                 } catch (Exception e) {
                     logger.debug("Error parsing {} value from match: {}", metricName, matcher.group(), e);

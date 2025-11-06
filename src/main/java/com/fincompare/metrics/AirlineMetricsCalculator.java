@@ -35,17 +35,19 @@ public class AirlineMetricsCalculator {
     }
 
     /**
-     * Calculate load factors
+     * Calculate load factors (only if not already extracted from 10-K)
      */
     private void calculateLoadFactors(AirlineOperationalData data) {
         // Passenger Load Factor = RPM / ASM * 100
-        if (data.getRevenuePassengerMiles() != null && data.getAvailableSeatMiles() != null &&
+        // Only calculate if not already set (extracted from 10-K takes precedence)
+        if (data.getPassengerLoadFactor() == null &&
+                data.getRevenuePassengerMiles() != null && data.getAvailableSeatMiles() != null &&
                 data.getAvailableSeatMiles().compareTo(ZERO) > 0) {
             BigDecimal loadFactor = data.getRevenuePassengerMiles()
                     .divide(data.getAvailableSeatMiles(), MC)
                     .multiply(HUNDRED);
             data.setPassengerLoadFactor(loadFactor);
-            logger.debug("Passenger Load Factor: {}%", loadFactor);
+            logger.debug("Calculated Passenger Load Factor: {}%", loadFactor);
         }
 
         // Cargo Load Factor (if cargo data available)
