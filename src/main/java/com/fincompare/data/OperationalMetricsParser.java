@@ -220,43 +220,72 @@ public class OperationalMetricsParser {
             return numbersFound.get(0);
         }
 
-        // Strategy 1: Look for fiscal year in the same row or nearby cells
-        for (int i = 0; i < numberIndices.size(); i++) {
-            int cellIndex = numberIndices.get(i);
-            // Check adjacent cells for the fiscal year
-            if (cellIndex > 0 && cells.get(cellIndex - 1).text().contains(fiscalYear)) {
-                logger.info("Selected value at index {} based on adjacent year label", i);
-                return numbersFound.get(i);
-            }
-            if (cellIndex < cells.size() - 1 && cells.get(cellIndex + 1).text().contains(fiscalYear)) {
-                logger.info("Selected value at index {} based on adjacent year label", i);
-                return numbersFound.get(i);
-            }
-        }
+        // Strategy 1: Look for fiscal year in table header rows (most reliable)
+        Elements allRows = table.select("tr");
+        for (int rowIdx = 0; rowIdx < Math.min(3, allRows.size()); rowIdx++) {
+            Element headerRow = allRows.get(rowIdx);
+            Elements headerCells = headerRow.select("th, td");
 
-        // Strategy 2: Look for fiscal year in table header row
-        Elements headerRows = table.select("thead tr, tr:has(th)");
-        if (!headerRows.isEmpty()) {
-            for (Element headerRow : headerRows) {
-                Elements headerCells = headerRow.select("th, td");
-                for (int i = 0; i < headerCells.size() && i < numberIndices.size(); i++) {
-                    if (headerCells.get(i).text().contains(fiscalYear)) {
-                        // Found the fiscal year in header - use corresponding data column
-                        int dataColumnIndex = i;
-                        if (dataColumnIndex < numbersFound.size()) {
-                            logger.info("Selected value at index {} based on header year match", dataColumnIndex);
-                            return numbersFound.get(dataColumnIndex);
-                        }
+            for (int cellIdx = 0; cellIdx < headerCells.size(); cellIdx++) {
+                String cellText = headerCells.get(cellIdx).text();
+                // Look for the fiscal year in this header cell
+                if (cellText.contains(fiscalYear)) {
+                    // Found the year! Now map to data column
+                    // The data row might have different structure, so look for the Nth numeric value
+                    if (cellIdx > 0 && cellIdx - 1 < numbersFound.size()) {
+                        logger.info("Selected value at index {} based on header row {} column match for year {}",
+                            cellIdx - 1, rowIdx, fiscalYear);
+                        return numbersFound.get(cellIdx - 1);
+                    } else if (cellIdx < numbersFound.size()) {
+                        logger.info("Selected value at index {} based on header row {} direct column match for year {}",
+                            cellIdx, rowIdx, fiscalYear);
+                        return numbersFound.get(cellIdx);
                     }
                 }
             }
         }
 
-        // Strategy 3: Default to first column (most recent year in typical 10-K format)
-        // But log a warning that we couldn't match the fiscal year
-        logger.warn("Could not match fiscal year {} to table columns, defaulting to first value: {}",
-            fiscalYear, numbersFound.get(0));
-        return numbersFound.get(0);
+        // Strategy 2: Look for fiscal year in the same row (in adjacent cells)
+        for (int i = 0; i < numberIndices.size(); i++) {
+            int cellIndex = numberIndices.get(i);
+            // Check cells around the number
+            for (int offset = -2; offset <= 2; offset++) {
+                int checkIdx = cellIndex + offset;
+                if (checkIdx >= 0 && checkIdx < cells.size()) {
+                    String cellText = cells.get(checkIdx).text();
+                    if (cellText.contains(fiscalYear)) {
+                        logger.info("Selected value at index {} based on adjacent cell containing year {}", i, fiscalYear);
+                        return numbersFound.get(i);
+                    }
+                }
+            }
+        }
+
+        // Strategy 3: Search the entire table for year context
+        String tableHtml = table.html().toLowerCase();
+        // Look for patterns like "2024 2023 2022" in headers
+        java.util.regex.Pattern yearSequencePattern = java.util.regex.Pattern.compile(
+            "(\\d{4})\\s+(\\d{4})\\s+(\\d{4})"
+        );
+        java.util.regex.Matcher matcher = yearSequencePattern.matcher(table.text());
+        if (matcher.find()) {
+            // Found a sequence of years - determine position of our target year
+            for (int groupIdx = 1; groupIdx <= matcher.groupCount(); groupIdx++) {
+                if (matcher.group(groupIdx).equals(fiscalYear)) {
+                    int yearPosition = groupIdx - 1; // 0-indexed position
+                    if (yearPosition < numbersFound.size()) {
+                        logger.info("Selected value at index {} based on year sequence pattern match", yearPosition);
+                        return numbersFound.get(yearPosition);
+                    }
+                }
+            }
+        }
+
+        // Strategy 4: If we can't find the year, return null instead of guessing
+        // This is better than returning wrong data
+        logger.warn("Could not match fiscal year {} to any table column. Found {} candidate values but cannot determine which is correct. Returning null to avoid incorrect data.",
+            fiscalYear, numbersFound.size());
+        return null;
     }
 
     /**
