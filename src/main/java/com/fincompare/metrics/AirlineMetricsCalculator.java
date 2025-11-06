@@ -69,14 +69,17 @@ public class AirlineMetricsCalculator {
             return;
         }
 
-        BigDecimal asm = data.getAvailableSeatMiles();
+        // ASM is stored in millions, need to convert to actual seat miles
+        BigDecimal asmMillions = data.getAvailableSeatMiles();
+        BigDecimal asmActual = asmMillions.multiply(new BigDecimal("1000000")); // Convert millions to actual
 
         if (income != null) {
             // RASM = Total Revenue / ASM (in cents)
+            // Revenue is in dollars, ASM is in actual seat miles
             if (income.getTotalRevenue() != null) {
                 BigDecimal rasm = income.getTotalRevenue()
                         .multiply(HUNDRED) // Convert to cents
-                        .divide(asm, MC);
+                        .divide(asmActual, MC);
                 data.setRasm(rasm);
                 logger.debug("RASM: {} cents", rasm);
             }
@@ -85,7 +88,7 @@ public class AirlineMetricsCalculator {
             if (income.getOperatingExpenses() != null) {
                 BigDecimal casm = income.getOperatingExpenses()
                         .multiply(HUNDRED)
-                        .divide(asm, MC);
+                        .divide(asmActual, MC);
                 data.setCasm(casm);
                 logger.debug("CASM: {} cents", casm);
 
@@ -94,7 +97,7 @@ public class AirlineMetricsCalculator {
                     BigDecimal opExExFuel = income.getOperatingExpenses().subtract(income.getFuelCosts());
                     BigDecimal casmEx = opExExFuel
                             .multiply(HUNDRED)
-                            .divide(asm, MC);
+                            .divide(asmActual, MC);
                     data.setCasmEx(casmEx);
                     logger.debug("CASM-ex (excluding fuel): {} cents", casmEx);
                 }
@@ -111,21 +114,25 @@ public class AirlineMetricsCalculator {
         }
 
         // Passenger Yield = Passenger Revenue / RPM (in cents)
+        // RPM is stored in millions, need to convert to actual
         if (income.getPassengerRevenue() != null && data.getRevenuePassengerMiles() != null &&
                 data.getRevenuePassengerMiles().compareTo(ZERO) > 0) {
+            BigDecimal rpmActual = data.getRevenuePassengerMiles().multiply(new BigDecimal("1000000"));
             BigDecimal passengerYield = income.getPassengerRevenue()
                     .multiply(HUNDRED)
-                    .divide(data.getRevenuePassengerMiles(), MC);
+                    .divide(rpmActual, MC);
             data.setPassengerYield(passengerYield);
             logger.debug("Passenger Yield: {} cents per RPM", passengerYield);
         }
 
         // Cargo Yield = Cargo Revenue / Cargo Ton Miles (in cents)
+        // CargoTonMiles is also stored in millions
         if (income.getCargoRevenue() != null && data.getCargoTonMiles() != null &&
                 data.getCargoTonMiles().compareTo(ZERO) > 0) {
+            BigDecimal cargoTonMilesActual = data.getCargoTonMiles().multiply(new BigDecimal("1000000"));
             BigDecimal cargoYield = income.getCargoRevenue()
                     .multiply(HUNDRED)
-                    .divide(data.getCargoTonMiles(), MC);
+                    .divide(cargoTonMilesActual, MC);
             data.setCargoYield(cargoYield);
         }
     }
@@ -186,12 +193,18 @@ public class AirlineMetricsCalculator {
             valid = false;
         }
 
-        // Break-even load factor should be reasonable (typically 70-85%)
+        // Break-even load factor should be reasonable (typically 70-95%)
+        // Values >100% are possible (airline can't break even) but >150% likely indicates bad data
         if (data.getBreakEvenLoadFactor() != null) {
             BigDecimal belf = data.getBreakEvenLoadFactor();
-            if (belf.compareTo(ZERO) < 0 || belf.compareTo(HUNDRED) > 0) {
-                logger.warn("Invalid break-even load factor: {}%. Should be between 0 and 100.", belf);
+            if (belf.compareTo(ZERO) < 0) {
+                logger.warn("Invalid break-even load factor: {}%. Should be positive.", belf);
                 valid = false;
+            } else if (belf.compareTo(new BigDecimal("150")) > 0) {
+                logger.warn("Suspicious break-even load factor: {}%. Values >150% likely indicate data quality issues.", belf);
+                valid = false;
+            } else if (belf.compareTo(HUNDRED) > 0) {
+                logger.info("Break-even load factor: {}%. Value >100% means airline cannot break even at full capacity.", belf);
             }
         }
 
