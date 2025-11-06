@@ -69,7 +69,9 @@ public class SECEdgarClient {
     public List<SECFilingMetadata> get10KFilings(String cik, int maxFilings) throws IOException, ParseException {
         logger.info("Fetching 10-K filings for CIK: {}", cik);
 
-        String url = String.format("%s/submissions/CIK%s.json", SEC_BASE_URL, cik);
+        // Ensure CIK is zero-padded to 10 digits for SEC API
+        String paddedCik = padCik(cik);
+        String url = String.format("%s/submissions/CIK%s.json", SEC_BASE_URL, paddedCik);
 
         HttpGet request = new HttpGet(url);
         request.setHeader("User-Agent", USER_AGENT);
@@ -196,9 +198,11 @@ public class SECEdgarClient {
      * Fetch company facts (all financial data)
      */
     public String fetchCompanyFacts(String cik) throws IOException, ParseException {
-        String url = String.format("%s/api/xbrl/companyfacts/CIK%s.json", SEC_BASE_URL, cik);
+        // Ensure CIK is zero-padded to 10 digits for SEC API
+        String paddedCik = padCik(cik);
+        String url = String.format("%s/api/xbrl/companyfacts/CIK%s.json", SEC_BASE_URL, paddedCik);
 
-        logger.info("Fetching company facts for CIK: {}", cik);
+        logger.info("Fetching company facts for CIK: {}", paddedCik);
 
         HttpGet request = new HttpGet(url);
         request.setHeader("User-Agent", USER_AGENT);
@@ -212,6 +216,19 @@ public class SECEdgarClient {
 
             return EntityUtils.toString(response.getEntity());
         }
+    }
+
+    /**
+     * Ensures CIK is zero-padded to 10 digits as required by SEC API
+     * @param cik The CIK with or without leading zeros
+     * @return Zero-padded CIK (10 digits)
+     */
+    private String padCik(String cik) {
+        // Remove any existing leading zeros and "CIK" prefix if present
+        String numericCik = cik.replaceAll("^(CIK)?0+", "");
+
+        // Pad to 10 digits
+        return String.format("%010d", Long.parseLong(numericCik));
     }
 
     public void close() throws IOException {
