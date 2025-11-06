@@ -226,8 +226,14 @@ public class BTSApiClient {
                 // Try multiple possible carrier code column names
                 String rowCarrier = null;
                 String[] possibleCarrierColumns = {
-                    "UNIQUE_CARRIER", "OP_UNIQUE_CARRIER", "OP_CARRIER",
-                    "CARRIER", "AIRLINE_ID", "Unique_Carrier", "Carrier"
+                    "Reporting_Airline",           // BTS On-Time Performance CSV (2024+)
+                    "UNIQUE_CARRIER",              // Legacy BTS format
+                    "OP_UNIQUE_CARRIER",           // Alternative format
+                    "IATA_CODE_Reporting_Airline", // Alternative in same files
+                    "OP_CARRIER",
+                    "CARRIER",
+                    "Unique_Carrier",
+                    "Carrier"
                 };
 
                 for (String columnName : possibleCarrierColumns) {
@@ -251,22 +257,23 @@ public class BTSApiClient {
                 // Convert CSV row to JSON object with fields expected by DOTDataParser
                 ObjectNode record = objectMapper.createObjectNode();
 
-                // Flight counts
-                record.put("ARR_FLIGHTS", parseIntOrZero(row.get("ARR_FLIGHTS")));
-                record.put("ARR_DEL15", parseIntOrZero(row.get("ARR_DEL15")));  // Delayed 15+ min
-                record.put("CANCELLED", parseIntOrZero(row.get("CANCELLED")));
-                record.put("DIVERTED", parseIntOrZero(row.get("DIVERTED")));
+                // Flight counts (note: actual CSV uses "Flights" column, value is 1 per row)
+                // We aggregate by counting rows, so just mark each row as 1 flight
+                record.put("ARR_FLIGHTS", parseIntOrZero(row.get("Flights")));
+                record.put("ARR_DEL15", parseIntOrZero(row.get("ArrDel15")));  // Delayed 15+ min
+                record.put("CANCELLED", parseIntOrZero(row.get("Cancelled")));
+                record.put("DIVERTED", parseIntOrZero(row.get("Diverted")));
 
-                // Delay minutes by category
-                record.put("CARRIER_DELAY", parseDoubleOrZero(row.get("CARRIER_DELAY")));
-                record.put("WEATHER_DELAY", parseDoubleOrZero(row.get("WEATHER_DELAY")));
-                record.put("NAS_DELAY", parseDoubleOrZero(row.get("NAS_DELAY")));
-                record.put("SECURITY_DELAY", parseDoubleOrZero(row.get("SECURITY_DELAY")));
-                record.put("LATE_AIRCRAFT_DELAY", parseDoubleOrZero(row.get("LATE_AIRCRAFT_DELAY")));
+                // Delay minutes by category (CSV uses CamelCase without underscores)
+                record.put("CARRIER_DELAY", parseDoubleOrZero(row.get("CarrierDelay")));
+                record.put("WEATHER_DELAY", parseDoubleOrZero(row.get("WeatherDelay")));
+                record.put("NAS_DELAY", parseDoubleOrZero(row.get("NASDelay")));
+                record.put("SECURITY_DELAY", parseDoubleOrZero(row.get("SecurityDelay")));
+                record.put("LATE_AIRCRAFT_DELAY", parseDoubleOrZero(row.get("LateAircraftDelay")));
 
-                // Average delays
-                record.put("ARR_DELAY", parseDoubleOrZero(row.get("ARR_DELAY")));
-                record.put("DEP_DELAY", parseDoubleOrZero(row.get("DEP_DELAY")));
+                // Average delays (CSV uses CamelCase without underscores)
+                record.put("ARR_DELAY", parseDoubleOrZero(row.get("ArrDelay")));
+                record.put("DEP_DELAY", parseDoubleOrZero(row.get("DepDelay")));
 
                 dataArray.add(record);
             }
