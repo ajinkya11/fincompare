@@ -65,8 +65,8 @@ public class OperationalMetricsParser {
             Document doc = Jsoup.parse(htmlContent);
 
             // Strategy 1: Look for operational statistics tables
-            BigDecimal asm = extractFromTables(doc, "ASM");
-            BigDecimal rpm = extractFromTables(doc, "RPM");
+            BigDecimal asm = extractFromTables(doc, "ASM", fiscalYear);
+            BigDecimal rpm = extractFromTables(doc, "RPM", fiscalYear);
             BigDecimal loadFactor = extractLoadFactorFromTables(doc);
             Long passengers = extractPassengersFromTables(doc);
 
@@ -110,9 +110,9 @@ public class OperationalMetricsParser {
     /**
      * Extract metrics from tables (more reliable than free text)
      */
-    private BigDecimal extractFromTables(Document doc, String metricType) {
+    private BigDecimal extractFromTables(Document doc, String metricType, String fiscalYear) {
         Elements tables = doc.select("table");
-        logger.info("Searching {} tables for {} data", tables.size(), metricType);
+        logger.info("Searching {} tables for {} data (fiscal year: {})", tables.size(), metricType, fiscalYear);
 
         // Define search terms - be specific to avoid false matches
         String[] searchTerms;
@@ -160,30 +160,41 @@ public class OperationalMetricsParser {
                 }
 
                 if (matches) {
-                    // Extract the number from this row
+                    // Extract numbers from this row - may contain multiple years
                     Elements cells = row.select("td, th");
+                    java.util.List<BigDecimal> numbersFound = new java.util.ArrayList<>();
+                    java.util.List<Integer> numberIndices = new java.util.ArrayList<>();
+
+                    // Collect all valid numbers in the row
                     for (int i = 0; i < cells.size(); i++) {
                         String cellText = cells.get(i).text();
                         BigDecimal value = parseNumber(cellText);
                         if (value != null && value.compareTo(new BigDecimal("10")) > 0) {
-                            // Found a reasonable number
-                            logger.info("Found {} in table: {} from row: {}", metricType, value, rowText.substring(0, Math.min(100, rowText.length())));
+                            numbersFound.add(value);
+                            numberIndices.add(i);
+                        }
+                    }
+
+                    if (!numbersFound.isEmpty()) {
+                        // Try to find which number corresponds to the fiscal year we're parsing
+                        BigDecimal selectedValue = selectValueForFiscalYear(
+                            cells, numbersFound, numberIndices, fiscalYear, table);
+
+                        if (selectedValue != null) {
+                            logger.info("Found {} in table: {} from row: {} (selected from {} candidates)",
+                                metricType, selectedValue, rowText.substring(0, Math.min(100, rowText.length())), numbersFound.size());
 
                             // Determine if it's in millions or billions based on explicit unit markers
-                            // Be careful: "(b)" might be a footnote, not "billions"
-                            // Only convert if we see "billion" or "billions" as actual words
                             if (rowText.matches(".*\\bbillion\\b.*") || rowText.matches(".*\\bbillions\\b.*")) {
-                                // Check it's not already labeled as millions
                                 if (!rowText.contains("(millions)") && !rowText.contains("millions")) {
-                                    value = value.multiply(new BigDecimal("1000"));
-                                    logger.info("Converting from billions to millions: {}", value);
+                                    selectedValue = selectedValue.multiply(new BigDecimal("1000"));
+                                    logger.info("Converting from billions to millions: {}", selectedValue);
                                 }
-                            } else if (rowText.contains("million") || rowText.contains("(millions)") || value.compareTo(new BigDecimal("1000")) > 0) {
-                                // Already in millions or large number assumed to be millions
-                                logger.info("Value assumed to be in millions: {}", value);
+                            } else if (rowText.contains("million") || rowText.contains("(millions)") || selectedValue.compareTo(new BigDecimal("1000")) > 0) {
+                                logger.info("Value assumed to be in millions: {}", selectedValue);
                             }
 
-                            return value;
+                            return selectedValue;
                         }
                     }
                 }
@@ -192,6 +203,60 @@ public class OperationalMetricsParser {
 
         logger.warn("Could not find {} in any table", metricType);
         return null;
+    }
+
+    /**
+     * Select the appropriate value for the fiscal year from multi-year table data
+     */
+    private BigDecimal selectValueForFiscalYear(Elements cells, java.util.List<BigDecimal> numbersFound,
+                                                 java.util.List<Integer> numberIndices, String fiscalYear,
+                                                 Element table) {
+        if (numbersFound.isEmpty()) {
+            return null;
+        }
+
+        // If only one number, return it
+        if (numbersFound.size() == 1) {
+            return numbersFound.get(0);
+        }
+
+        // Strategy 1: Look for fiscal year in the same row or nearby cells
+        for (int i = 0; i < numberIndices.size(); i++) {
+            int cellIndex = numberIndices.get(i);
+            // Check adjacent cells for the fiscal year
+            if (cellIndex > 0 && cells.get(cellIndex - 1).text().contains(fiscalYear)) {
+                logger.info("Selected value at index {} based on adjacent year label", i);
+                return numbersFound.get(i);
+            }
+            if (cellIndex < cells.size() - 1 && cells.get(cellIndex + 1).text().contains(fiscalYear)) {
+                logger.info("Selected value at index {} based on adjacent year label", i);
+                return numbersFound.get(i);
+            }
+        }
+
+        // Strategy 2: Look for fiscal year in table header row
+        Elements headerRows = table.select("thead tr, tr:has(th)");
+        if (!headerRows.isEmpty()) {
+            for (Element headerRow : headerRows) {
+                Elements headerCells = headerRow.select("th, td");
+                for (int i = 0; i < headerCells.size() && i < numberIndices.size(); i++) {
+                    if (headerCells.get(i).text().contains(fiscalYear)) {
+                        // Found the fiscal year in header - use corresponding data column
+                        int dataColumnIndex = i;
+                        if (dataColumnIndex < numbersFound.size()) {
+                            logger.info("Selected value at index {} based on header year match", dataColumnIndex);
+                            return numbersFound.get(dataColumnIndex);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Strategy 3: Default to first column (most recent year in typical 10-K format)
+        // But log a warning that we couldn't match the fiscal year
+        logger.warn("Could not match fiscal year {} to table columns, defaulting to first value: {}",
+            fiscalYear, numbersFound.get(0));
+        return numbersFound.get(0);
     }
 
     /**
