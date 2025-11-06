@@ -477,39 +477,75 @@ public class ConsoleReportGenerator {
         String c1Name = analysis.getCompany1().getCompanyInfo().getTickerSymbol();
         String c2Name = analysis.getCompany2().getCompanyInfo().getTickerSymbol();
 
-        YearlyFinancialData c1Data = analysis.getCompany1().getLatestYearData();
-        YearlyFinancialData c2Data = analysis.getCompany2().getLatestYearData();
+        List<YearlyFinancialData> c1Years = analysis.getCompany1().getYearlyData();
+        List<YearlyFinancialData> c2Years = analysis.getCompany2().getYearlyData();
 
-        if (c1Data != null && c2Data != null) {
-            AirlineOperationalData op1 = c1Data.getOperationalData();
-            AirlineOperationalData op2 = c2Data.getOperationalData();
+        // If multi-year data, use table format
+        if (c1Years.size() > 1 || c2Years.size() > 1) {
+            // Build column headers
+            StringBuilder headerLine = new StringBuilder(String.format("%-40s", "Metric"));
+            for (YearlyFinancialData data : c1Years) {
+                headerLine.append(String.format(" %12s", c1Name + " " + data.getFiscalYear()));
+            }
+            for (YearlyFinancialData data : c2Years) {
+                headerLine.append(String.format(" %12s", c2Name + " " + data.getFiscalYear()));
+            }
 
-            if (op1 != null && op2 != null) {
-                // Print table header with fiscal years
-                String header1 = c1Name + " (FY" + c1Data.getFiscalYear() + ")";
-                String header2 = c2Name + " (FY" + c2Data.getFiscalYear() + ")";
-                System.out.println(String.format("%-" + LABEL_WIDTH + "s | %" + VALUE_WIDTH + "s | %" + VALUE_WIDTH + "s",
-                        "Metric", header1, header2));
-                System.out.println(repeat("-", LABEL_WIDTH + VALUE_WIDTH * 2 + 6));
+            System.out.println(headerLine.toString());
+            System.out.println(repeat("-", 40 + (c1Years.size() + c2Years.size()) * 13));
 
-                printOperationalRow("Available Seat Miles (M)", op1, op2,
-                        AirlineOperationalData::getAvailableSeatMiles, false);
-                printOperationalRow("Revenue Passenger Miles (M)", op1, op2,
-                        AirlineOperationalData::getRevenuePassengerMiles, false);
-                printOperationalRow("Load Factor %", op1, op2,
-                        AirlineOperationalData::getPassengerLoadFactor, true);
-                printOperationalRow("RASM (cents)", op1, op2,
-                        AirlineOperationalData::getRasm, true);
-                printOperationalRow("CASM (cents)", op1, op2,
-                        AirlineOperationalData::getCasm, false);
-                printOperationalRow("CASM-ex (cents)", op1, op2,
-                        AirlineOperationalData::getCasmEx, false);
-                printOperationalRow("Break-even Load Factor %", op1, op2,
-                        AirlineOperationalData::getBreakEvenLoadFactor, false);
-                printOperationalRow("Passenger Yield (cents)", op1, op2,
-                        AirlineOperationalData::getPassengerYield, true);
-            } else {
-                System.out.println("Operational data not available for one or both airlines.");
+            printDetailedMetricRow("ASM (millions)", c1Years, c2Years,
+                data -> formatMillionsCompact(data.getOperationalData().getAvailableSeatMiles()));
+            printDetailedMetricRow("RPM (millions)", c1Years, c2Years,
+                data -> formatMillionsCompact(data.getOperationalData().getRevenuePassengerMiles()));
+            printDetailedMetricRow("Load Factor %", c1Years, c2Years,
+                data -> formatPercentCompact(data.getOperationalData().getPassengerLoadFactor()));
+            printDetailedMetricRow("RASM (cents)", c1Years, c2Years,
+                data -> formatCentsCompact(data.getOperationalData().getRasm()));
+            printDetailedMetricRow("CASM (cents)", c1Years, c2Years,
+                data -> formatCentsCompact(data.getOperationalData().getCasm()));
+            printDetailedMetricRow("CASM-ex fuel (cents)", c1Years, c2Years,
+                data -> formatCentsCompact(data.getOperationalData().getCasmEx()));
+            printDetailedMetricRow("Break-even Load Factor %", c1Years, c2Years,
+                data -> formatPercentCompact(data.getOperationalData().getBreakEvenLoadFactor()));
+            printDetailedMetricRow("Passenger Yield (cents)", c1Years, c2Years,
+                data -> formatCentsCompact(data.getOperationalData().getPassengerYield()));
+        } else {
+            // Single year view
+            YearlyFinancialData c1Data = c1Years.isEmpty() ? null : c1Years.get(0);
+            YearlyFinancialData c2Data = c2Years.isEmpty() ? null : c2Years.get(0);
+
+            if (c1Data != null && c2Data != null) {
+                AirlineOperationalData op1 = c1Data.getOperationalData();
+                AirlineOperationalData op2 = c2Data.getOperationalData();
+
+                if (op1 != null && op2 != null) {
+                    // Print table header with fiscal years
+                    String header1 = c1Name + " (FY" + c1Data.getFiscalYear() + ")";
+                    String header2 = c2Name + " (FY" + c2Data.getFiscalYear() + ")";
+                    System.out.println(String.format("%-" + LABEL_WIDTH + "s | %" + VALUE_WIDTH + "s | %" + VALUE_WIDTH + "s",
+                            "Metric", header1, header2));
+                    System.out.println(repeat("-", LABEL_WIDTH + VALUE_WIDTH * 2 + 6));
+
+                    printOperationalRow("Available Seat Miles (M)", op1, op2,
+                            AirlineOperationalData::getAvailableSeatMiles, false);
+                    printOperationalRow("Revenue Passenger Miles (M)", op1, op2,
+                            AirlineOperationalData::getRevenuePassengerMiles, false);
+                    printOperationalRow("Load Factor %", op1, op2,
+                            AirlineOperationalData::getPassengerLoadFactor, true);
+                    printOperationalRow("RASM (cents)", op1, op2,
+                            AirlineOperationalData::getRasm, true);
+                    printOperationalRow("CASM (cents)", op1, op2,
+                            AirlineOperationalData::getCasm, false);
+                    printOperationalRow("CASM-ex (cents)", op1, op2,
+                            AirlineOperationalData::getCasmEx, false);
+                    printOperationalRow("Break-even Load Factor %", op1, op2,
+                            AirlineOperationalData::getBreakEvenLoadFactor, false);
+                    printOperationalRow("Passenger Yield (cents)", op1, op2,
+                            AirlineOperationalData::getPassengerYield, true);
+                } else {
+                    System.out.println("Operational data not available for one or both airlines.");
+                }
             }
         }
 
