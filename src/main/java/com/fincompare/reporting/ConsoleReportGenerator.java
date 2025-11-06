@@ -79,6 +79,13 @@ public class ConsoleReportGenerator {
                 }
 
                 printYearComparison(c1Name, c2Name, c1Data, c2Data);
+
+                // Print year-over-year changes if not the most recent year
+                if (i > 0 && i < maxYears) {
+                    YearlyFinancialData c1PrevData = i - 1 < c1AllYears.size() ? c1AllYears.get(i - 1) : null;
+                    YearlyFinancialData c2PrevData = i - 1 < c2AllYears.size() ? c2AllYears.get(i - 1) : null;
+                    printYoYChanges(c1Name, c2Name, c1Data, c1PrevData, c2Data, c2PrevData);
+                }
             }
         } else {
             // Single year view (original behavior)
@@ -220,6 +227,92 @@ public class ConsoleReportGenerator {
         }
 
         System.out.println();
+    }
+
+    /**
+     * Print year-over-year changes to show trends
+     */
+    private void printYoYChanges(String c1Name, String c2Name,
+                                  YearlyFinancialData c1Current, YearlyFinancialData c1Prev,
+                                  YearlyFinancialData c2Current, YearlyFinancialData c2Prev) {
+        System.out.println();
+        System.out.println(ansi().fg(Ansi.Color.MAGENTA).bold()
+                .a("⟳ YEAR-OVER-YEAR TRENDS")
+                .reset());
+
+        String header1 = c1Name + " YoY Change";
+        String header2 = c2Name + " YoY Change";
+        System.out.println(String.format("%-" + LABEL_WIDTH + "s | %" + VALUE_WIDTH + "s | %" + VALUE_WIDTH + "s",
+                "Metric", header1, header2));
+        System.out.println(repeat("-", LABEL_WIDTH + VALUE_WIDTH * 2 + 6));
+
+        // Key metrics to show trends
+        if (c1Current != null && c1Prev != null && c2Current != null && c2Prev != null) {
+            printYoYRow("Revenue Growth",
+                    c1Prev.getIncomeStatement().getTotalRevenue(),
+                    c1Current.getIncomeStatement().getTotalRevenue(),
+                    c2Prev.getIncomeStatement().getTotalRevenue(),
+                    c2Current.getIncomeStatement().getTotalRevenue());
+
+            printYoYRow("Op. Income Growth",
+                    c1Prev.getIncomeStatement().getOperatingIncome(),
+                    c1Current.getIncomeStatement().getOperatingIncome(),
+                    c2Prev.getIncomeStatement().getOperatingIncome(),
+                    c2Current.getIncomeStatement().getOperatingIncome());
+
+            printYoYRow("Net Income Growth",
+                    c1Prev.getIncomeStatement().getNetIncome(),
+                    c1Current.getIncomeStatement().getNetIncome(),
+                    c2Prev.getIncomeStatement().getNetIncome(),
+                    c2Current.getIncomeStatement().getNetIncome());
+
+            printYoYRow("Total Assets Growth",
+                    c1Prev.getBalanceSheet().getTotalAssets(),
+                    c1Current.getBalanceSheet().getTotalAssets(),
+                    c2Prev.getBalanceSheet().getTotalAssets(),
+                    c2Current.getBalanceSheet().getTotalAssets());
+
+            printYoYRow("Cash Growth",
+                    c1Prev.getBalanceSheet().getCashAndEquivalents(),
+                    c1Current.getBalanceSheet().getCashAndEquivalents(),
+                    c2Prev.getBalanceSheet().getCashAndEquivalents(),
+                    c2Current.getBalanceSheet().getCashAndEquivalents());
+        }
+    }
+
+    /**
+     * Print a single year-over-year comparison row
+     */
+    private void printYoYRow(String label, BigDecimal c1Prev, BigDecimal c1Current,
+                              BigDecimal c2Prev, BigDecimal c2Current) {
+        String c1Change = calculateYoYChange(c1Prev, c1Current);
+        String c2Change = calculateYoYChange(c2Prev, c2Current);
+
+        System.out.println(String.format("%-" + LABEL_WIDTH + "s | %" + VALUE_WIDTH + "s | %" + VALUE_WIDTH + "s",
+                label, c1Change, c2Change));
+    }
+
+    /**
+     * Calculate year-over-year percentage change with color coding
+     */
+    private String calculateYoYChange(BigDecimal prev, BigDecimal current) {
+        if (prev == null || current == null || prev.compareTo(BigDecimal.ZERO) == 0) {
+            return "N/A";
+        }
+
+        BigDecimal change = current.subtract(prev).divide(prev, 4, BigDecimal.ROUND_HALF_UP)
+                .multiply(new BigDecimal("100"));
+
+        String formatted = String.format("%+.2f%%", change.doubleValue());
+
+        // Color code: green for positive, red for negative
+        if (change.compareTo(BigDecimal.ZERO) > 0) {
+            return ansi().fg(Ansi.Color.GREEN).a("↑ " + formatted).reset().toString();
+        } else if (change.compareTo(BigDecimal.ZERO) < 0) {
+            return ansi().fg(Ansi.Color.RED).a("↓ " + formatted).reset().toString();
+        } else {
+            return formatted;
+        }
     }
 
     /**

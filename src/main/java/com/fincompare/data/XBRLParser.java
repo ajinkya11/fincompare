@@ -203,14 +203,21 @@ public class XBRLParser {
         stmt.setNetIncome(extractValue(usGaap, XBRL_TAGS.get("netIncome"), fiscalYear));
 
         // Try to extract detailed line items
-        stmt.setFuelCosts(extractValue(usGaap, Arrays.asList("FuelCosts", "CostOfGoodsAndServicesSold"), fiscalYear));
-        stmt.setLaborCosts(extractValue(usGaap, Arrays.asList("LaborAndRelatedExpense", "SalariesAndWages"), fiscalYear));
-        stmt.setDepreciationAmortization(extractValue(usGaap, Arrays.asList("DepreciationDepletionAndAmortization", "Depreciation"), fiscalYear));
-        stmt.setInterestExpense(extractValue(usGaap, Arrays.asList("InterestExpense"), fiscalYear));
+        stmt.setFuelCosts(extractValue(usGaap, Arrays.asList("FuelCosts", "FuelAndOilExpense",
+                "AircraftFuel", "CostOfGoodsAndServicesSold"), fiscalYear));
+        stmt.setLaborCosts(extractValue(usGaap, Arrays.asList("LaborAndRelatedExpense",
+                "SalariesAndWages", "EmployeeRelatedExpenses", "LaborAndBenefits"), fiscalYear));
+        stmt.setDepreciationAmortization(extractValue(usGaap, Arrays.asList("DepreciationDepletionAndAmortization",
+                "Depreciation", "DepreciationAndAmortization", "DepreciationAmortizationAndAccretionNet"), fiscalYear));
+        stmt.setInterestExpense(extractValue(usGaap, Arrays.asList("InterestExpense",
+                "InterestExpenseDebt", "InterestAndDebtExpense", "InterestIncomeExpenseNonoperatingNet",
+                "InterestExpenseNet", "InterestPaidNet"), fiscalYear));
 
         // EPS
-        stmt.setBasicEPS(extractValue(usGaap, Arrays.asList("EarningsPerShareBasic"), fiscalYear));
-        stmt.setDilutedEPS(extractValue(usGaap, Arrays.asList("EarningsPerShareDiluted"), fiscalYear));
+        stmt.setBasicEPS(extractValue(usGaap, Arrays.asList("EarningsPerShareBasic",
+                "IncomeLossFromContinuingOperationsPerBasicShare"), fiscalYear));
+        stmt.setDilutedEPS(extractValue(usGaap, Arrays.asList("EarningsPerShareDiluted",
+                "IncomeLossFromContinuingOperationsPerDilutedShare"), fiscalYear));
 
         // Calculate gross profit if not directly available
         if (stmt.getTotalRevenue() != null && stmt.getOperatingExpenses() != null) {
@@ -229,18 +236,28 @@ public class XBRLParser {
 
         // Assets
         bs.setTotalAssets(extractValue(usGaap, XBRL_TAGS.get("totalAssets"), fiscalYear));
-        bs.setCurrentAssets(extractValue(usGaap, Arrays.asList("AssetsCurrent"), fiscalYear));
+        bs.setCurrentAssets(extractValue(usGaap, Arrays.asList("AssetsCurrent", "CurrentAssets"), fiscalYear));
         bs.setCashAndEquivalents(extractValue(usGaap, XBRL_TAGS.get("cashAndEquivalents"), fiscalYear));
-        bs.setAccountsReceivable(extractValue(usGaap, Arrays.asList("AccountsReceivableNetCurrent"), fiscalYear));
-        bs.setInventory(extractValue(usGaap, Arrays.asList("InventoryNet"), fiscalYear));
-        bs.setPropertyPlantEquipment(extractValue(usGaap, Arrays.asList("PropertyPlantAndEquipmentGross"), fiscalYear));
-        bs.setNetPPE(extractValue(usGaap, Arrays.asList("PropertyPlantAndEquipmentNet"), fiscalYear));
+        bs.setAccountsReceivable(extractValue(usGaap, Arrays.asList("AccountsReceivableNetCurrent",
+                "AccountsReceivableNet", "ReceivablesNetCurrent", "AccountsAndNotesReceivableNet"), fiscalYear));
+        bs.setInventory(extractValue(usGaap, Arrays.asList("InventoryNet", "Inventory",
+                "InventoryGross", "InventoriesNet"), fiscalYear));
+        bs.setPropertyPlantEquipment(extractValue(usGaap, Arrays.asList("PropertyPlantAndEquipmentGross",
+                "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetBeforeAccumulatedDepreciationAndAmortization",
+                "PropertyPlantAndEquipmentGrossExcludingConstructionInProgress"), fiscalYear));
+        bs.setNetPPE(extractValue(usGaap, Arrays.asList("PropertyPlantAndEquipmentNet",
+                "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization",
+                "PropertyPlantAndEquipmentNetExcludingConstructionInProgress"), fiscalYear));
 
         // Liabilities
         bs.setTotalLiabilities(extractValue(usGaap, XBRL_TAGS.get("totalLiabilities"), fiscalYear));
-        bs.setCurrentLiabilities(extractValue(usGaap, Arrays.asList("LiabilitiesCurrent"), fiscalYear));
-        bs.setLongTermDebt(extractValue(usGaap, Arrays.asList("LongTermDebtNoncurrent", "LongTermDebt"), fiscalYear));
-        bs.setShortTermDebt(extractValue(usGaap, Arrays.asList("ShortTermBorrowings", "DebtCurrent"), fiscalYear));
+        bs.setCurrentLiabilities(extractValue(usGaap, Arrays.asList("LiabilitiesCurrent", "CurrentLiabilities"), fiscalYear));
+        bs.setLongTermDebt(extractValue(usGaap, Arrays.asList("LongTermDebtNoncurrent", "LongTermDebt",
+                "LongTermDebtAndCapitalLeaseObligations", "LongtermDebtNoncurrent",
+                "LongTermDebtExcludingCurrentMaturities"), fiscalYear));
+        bs.setShortTermDebt(extractValue(usGaap, Arrays.asList("ShortTermBorrowings", "DebtCurrent",
+                "ShortTermDebtAndCapitalLeaseObligations", "CurrentPortionOfLongTermDebt",
+                "LongTermDebtCurrent", "DebtCurrentAndNoncurrent"), fiscalYear));
 
         // Equity
         bs.setTotalEquity(extractValue(usGaap, XBRL_TAGS.get("totalEquity"), fiscalYear));
@@ -263,29 +280,39 @@ public class XBRLParser {
         cf.setCapitalExpenditures(extractValue(usGaap,
                 Arrays.asList("PaymentsToAcquirePropertyPlantAndEquipment",
                             "PaymentsForCapitalImprovements",
-                            "CapitalExpenditureIncurredButNotYetPaid"), fiscalYear));
+                            "CapitalExpenditureIncurredButNotYetPaid",
+                            "PaymentsToAcquireProductiveAssets",
+                            "PaymentsForProceedsFromProductiveAssets",
+                            "CapitalExpendituresIncurredButNotYetPaid"), fiscalYear));
         cf.setDepreciationAmortization(extractValue(usGaap,
                 Arrays.asList("DepreciationDepletionAndAmortization",
                             "Depreciation",
-                            "DepreciationAndAmortization"), fiscalYear));
+                            "DepreciationAndAmortization",
+                            "DepreciationAmortizationAndAccretionNet"), fiscalYear));
 
         // Additional cash flow components
         cf.setNetIncome(extractValue(usGaap, XBRL_TAGS.get("netIncome"), fiscalYear));
         cf.setDebtIssuance(extractValue(usGaap,
                 Arrays.asList("ProceedsFromIssuanceOfLongTermDebt",
-                            "ProceedsFromDebtNetOfIssuanceCosts"), fiscalYear));
+                            "ProceedsFromDebtNetOfIssuanceCosts",
+                            "ProceedsFromIssuanceOfDebt",
+                            "ProceedsFromLongTermLinesOfCredit",
+                            "ProceedsFromLongTermDebt"), fiscalYear));
         cf.setDebtRepayment(extractValue(usGaap,
                 Arrays.asList("RepaymentsOfLongTermDebt",
-                            "RepaymentsOfDebt"), fiscalYear));
+                            "RepaymentsOfDebt",
+                            "RepaymentsOfLongTermLinesOfCredit",
+                            "RepaymentsOfLongTermCapitalLeaseObligations",
+                            "RepaymentsOfLongTermDebtAndCapitalSecurities"), fiscalYear));
 
         // Calculate free cash flow
         if (cf.getOperatingCashFlow() != null && cf.getCapitalExpenditures() != null) {
             cf.setFreeCashFlow(cf.getOperatingCashFlow().subtract(cf.getCapitalExpenditures().abs()));
         }
 
-        logger.debug("Cash flow data - Operating: {}, Investing: {}, Financing: {}, CapEx: {}, FCF: {}",
+        logger.debug("Cash flow parsed - OCF: {}, ICF: {}, FCF: {}, CapEx: {}, D&A: {}",
                 cf.getOperatingCashFlow(), cf.getInvestingCashFlow(), cf.getFinancingCashFlow(),
-                cf.getCapitalExpenditures(), cf.getFreeCashFlow());
+                cf.getCapitalExpenditures(), cf.getDepreciationAmortization());
 
         return cf;
     }
