@@ -43,6 +43,15 @@ public class CompareCommand implements Callable<Integer> {
     @Option(names = {"--metrics"}, description = "Show only specific metrics (operational, profitability, liquidity)")
     private String metricsFilter;
 
+    @Option(names = {"--detail"}, description = "Show detailed financial statements with 3-year trends")
+    private boolean detailView;
+
+    @Option(names = {"--ops"}, description = "Show operational deep-dive with unit economics and fleet details")
+    private boolean opsView;
+
+    @Option(names = {"--data-quality"}, description = "Show data quality report with sources and validation")
+    private boolean dataQualityView;
+
     private final FinancialAnalysisService analysisService;
     private final ComparativeAnalysisEngine comparisonEngine;
     private final ConsoleReportGenerator consoleReporter;
@@ -73,8 +82,8 @@ public class CompareCommand implements Callable<Integer> {
             System.out.println("📊 Performing comparative analysis...");
             ComparativeAnalysis analysis = comparisonEngine.compare(company1Data, company2Data);
 
-            // Generate console report
-            consoleReporter.generateReport(analysis);
+            // Generate console report with appropriate detail level
+            consoleReporter.generateReport(analysis, detailView, opsView, dataQualityView);
 
             // Export to file if requested
             if (outputFile != null) {
