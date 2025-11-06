@@ -114,9 +114,17 @@ public class OperationalMetricsParser {
         Elements tables = doc.select("table");
         logger.info("Searching {} tables for {} data", tables.size(), metricType);
 
-        String[] searchTerms = metricType.equals("ASM")
-            ? new String[]{"available seat miles", "asm", "capacity"}
-            : new String[]{"revenue passenger miles", "rpm", "traffic"};
+        // Define search terms - be specific to avoid false matches
+        String[] searchTerms;
+        String[] exclusionTerms;
+
+        if (metricType.equals("ASM")) {
+            searchTerms = new String[]{"available seat miles", "asms (millions)"};
+            exclusionTerms = new String[]{"per asm", "revenue per asm", "/ asm"};
+        } else {
+            searchTerms = new String[]{"revenue passenger miles", "rpms (millions)"};
+            exclusionTerms = new String[]{"per rpm", "/ rpm"};
+        }
 
         for (Element table : tables) {
             // Check if this table contains operational statistics
@@ -129,6 +137,18 @@ public class OperationalMetricsParser {
             Elements rows = table.select("tr");
             for (Element row : rows) {
                 String rowText = row.text().toLowerCase();
+
+                // Check if this row should be excluded (per-unit metrics)
+                boolean shouldExclude = false;
+                for (String exclusion : exclusionTerms) {
+                    if (rowText.contains(exclusion)) {
+                        shouldExclude = true;
+                        break;
+                    }
+                }
+                if (shouldExclude) {
+                    continue;
+                }
 
                 // Check if this row contains our metric
                 boolean matches = false;
@@ -149,11 +169,16 @@ public class OperationalMetricsParser {
                             // Found a reasonable number
                             logger.info("Found {} in table: {} from row: {}", metricType, value, rowText.substring(0, Math.min(100, rowText.length())));
 
-                            // Determine if it's in millions or billions based on context
-                            if (rowText.contains("billion") || rowText.contains("(b)")) {
-                                value = value.multiply(new BigDecimal("1000"));
-                                logger.info("Converting from billions to millions: {}", value);
-                            } else if (rowText.contains("million") || rowText.contains("(m)") || value.compareTo(new BigDecimal("1000")) > 0) {
+                            // Determine if it's in millions or billions based on explicit unit markers
+                            // Be careful: "(b)" might be a footnote, not "billions"
+                            // Only convert if we see "billion" or "billions" as actual words
+                            if (rowText.matches(".*\\bbillion\\b.*") || rowText.matches(".*\\bbillions\\b.*")) {
+                                // Check it's not already labeled as millions
+                                if (!rowText.contains("(millions)") && !rowText.contains("millions")) {
+                                    value = value.multiply(new BigDecimal("1000"));
+                                    logger.info("Converting from billions to millions: {}", value);
+                                }
+                            } else if (rowText.contains("million") || rowText.contains("(millions)") || value.compareTo(new BigDecimal("1000")) > 0) {
                                 // Already in millions or large number assumed to be millions
                                 logger.info("Value assumed to be in millions: {}", value);
                             }
