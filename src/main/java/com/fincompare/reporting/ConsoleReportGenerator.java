@@ -81,9 +81,10 @@ public class ConsoleReportGenerator {
                 printYearComparison(c1Name, c2Name, c1Data, c2Data);
 
                 // Print year-over-year changes if not the most recent year
-                if (i > 0 && i < maxYears) {
-                    YearlyFinancialData c1PrevData = i - 1 < c1AllYears.size() ? c1AllYears.get(i - 1) : null;
-                    YearlyFinancialData c2PrevData = i - 1 < c2AllYears.size() ? c2AllYears.get(i - 1) : null;
+                // Data is ordered [2024, 2023, 2022], so previous year is at index i+1
+                if (i > 0 && (i + 1) < c1AllYears.size() && (i + 1) < c2AllYears.size()) {
+                    YearlyFinancialData c1PrevData = c1AllYears.get(i + 1);
+                    YearlyFinancialData c2PrevData = c2AllYears.get(i + 1);
                     printYoYChanges(c1Name, c2Name, c1Data, c1PrevData, c2Data, c2PrevData);
                 }
             }

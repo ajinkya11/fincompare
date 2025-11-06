@@ -241,13 +241,19 @@ public class XBRLParser {
         bs.setAccountsReceivable(extractValue(usGaap, Arrays.asList("AccountsReceivableNetCurrent",
                 "AccountsReceivableNet", "ReceivablesNetCurrent", "AccountsAndNotesReceivableNet"), fiscalYear));
         bs.setInventory(extractValue(usGaap, Arrays.asList("InventoryNet", "Inventory",
-                "InventoryGross", "InventoriesNet"), fiscalYear));
+                "InventoryGross", "InventoriesNet", "InventoryFinishedGoodsNetOfReserves",
+                "InventoryPartsAndComponents", "InventoryRawMaterials", "InventorySupplies",
+                "MaterialsSuppliesAndFuel", "PartsAndSuppliesInventoryNet"), fiscalYear));
         bs.setPropertyPlantEquipment(extractValue(usGaap, Arrays.asList("PropertyPlantAndEquipmentGross",
                 "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetBeforeAccumulatedDepreciationAndAmortization",
-                "PropertyPlantAndEquipmentGrossExcludingConstructionInProgress"), fiscalYear));
+                "PropertyPlantAndEquipmentGrossExcludingConstructionInProgress",
+                "PropertyPlantAndEquipmentOtherGross", "PropertyAndEquipmentGross",
+                "PropertyPlantAndEquipmentIncludingFinanceLeaseRightOfUseAssetGross"), fiscalYear));
         bs.setNetPPE(extractValue(usGaap, Arrays.asList("PropertyPlantAndEquipmentNet",
                 "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization",
-                "PropertyPlantAndEquipmentNetExcludingConstructionInProgress"), fiscalYear));
+                "PropertyPlantAndEquipmentNetExcludingConstructionInProgress",
+                "PropertyPlantAndEquipmentOtherNet", "PropertyAndEquipmentNet",
+                "PropertyPlantAndEquipmentIncludingFinanceLeaseRightOfUseAssetNet"), fiscalYear));
 
         // Liabilities
         bs.setTotalLiabilities(extractValue(usGaap, XBRL_TAGS.get("totalLiabilities"), fiscalYear));
@@ -257,7 +263,10 @@ public class XBRLParser {
                 "LongTermDebtExcludingCurrentMaturities"), fiscalYear));
         bs.setShortTermDebt(extractValue(usGaap, Arrays.asList("ShortTermBorrowings", "DebtCurrent",
                 "ShortTermDebtAndCapitalLeaseObligations", "CurrentPortionOfLongTermDebt",
-                "LongTermDebtCurrent", "DebtCurrentAndNoncurrent"), fiscalYear));
+                "LongTermDebtCurrent", "DebtCurrentAndNoncurrent", "ShortTermDebt",
+                "CurrentMaturitiesOfLongTermDebt", "NotesPayableCurrent",
+                "BankOverdrafts", "ShortTermLoans", "CommercialPaper",
+                "FinanceLeaseLiabilityCurrent", "CapitalLeaseObligationsCurrent"), fiscalYear));
 
         // Equity
         bs.setTotalEquity(extractValue(usGaap, XBRL_TAGS.get("totalEquity"), fiscalYear));
