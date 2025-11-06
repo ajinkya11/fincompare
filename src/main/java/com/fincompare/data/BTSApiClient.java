@@ -210,18 +210,36 @@ public class BTSApiClient {
 
             int totalRows = 0;
             int matchedRows = 0;
+            boolean headersLogged = false;
+            Set<String> uniqueCarriers = new HashSet<>();
 
             while (it.hasNext()) {
                 Map<String, String> row = (Map<String, String>) it.next();
                 totalRows++;
 
-                // Filter by carrier code
-                String rowCarrier = row.get("UNIQUE_CARRIER");  // or "CARRIER" or "OP_CARRIER"
-                if (rowCarrier == null) {
-                    rowCarrier = row.get("CARRIER");
+                // Log column headers on first row for debugging
+                if (!headersLogged) {
+                    logger.info("CSV columns available: {}", row.keySet());
+                    headersLogged = true;
                 }
-                if (rowCarrier == null) {
-                    rowCarrier = row.get("OP_CARRIER");
+
+                // Try multiple possible carrier code column names
+                String rowCarrier = null;
+                String[] possibleCarrierColumns = {
+                    "UNIQUE_CARRIER", "OP_UNIQUE_CARRIER", "OP_CARRIER",
+                    "CARRIER", "AIRLINE_ID", "Unique_Carrier", "Carrier"
+                };
+
+                for (String columnName : possibleCarrierColumns) {
+                    rowCarrier = row.get(columnName);
+                    if (rowCarrier != null && !rowCarrier.trim().isEmpty()) {
+                        break;
+                    }
+                }
+
+                // Collect unique carriers for debugging (first 100 rows only)
+                if (totalRows <= 100 && rowCarrier != null) {
+                    uniqueCarriers.add(rowCarrier);
                 }
 
                 if (rowCarrier == null || !rowCarrier.equals(carrierCode)) {
@@ -251,6 +269,12 @@ public class BTSApiClient {
                 record.put("DEP_DELAY", parseDoubleOrZero(row.get("DEP_DELAY")));
 
                 dataArray.add(record);
+            }
+
+            // Log debugging info about carriers found
+            if (matchedRows == 0) {
+                logger.warn("No rows matched carrier code '{}'. Sample carriers found in first 100 rows: {}",
+                    carrierCode, uniqueCarriers);
             }
 
             logger.info("Parsed {} total rows, found {} rows for carrier {}", totalRows, matchedRows, carrierCode);
