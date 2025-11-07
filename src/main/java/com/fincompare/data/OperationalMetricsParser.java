@@ -200,13 +200,17 @@ public class OperationalMetricsParser {
                     (tableText.contains("atlantic") || tableText.contains("pacific") ||
                      tableText.contains("latin") || tableText.contains("international"));
 
+                if (isGeographicTable) {
+                    logger.info("Found potential geographic table");
+                }
+
                 // Skip tables showing changes/deltas rather than absolute values
                 if (isGeographicTable && (tableText.contains("increase (decrease)") ||
                     tableText.contains("increase/(decrease)") ||
                     tableText.contains("change from") ||
                     tableText.contains("year-over-year") ||
                     tableText.contains("yoy change"))) {
-                    logger.debug("Skipping geographic table showing changes rather than absolute values");
+                    logger.info("Skipping geographic table showing changes rather than absolute values");
                     continue;
                 }
 
@@ -250,9 +254,11 @@ public class OperationalMetricsParser {
 
                     // In geographic tables, extract region-based revenue
                     if (isGeographicTable && rowText.contains("passenger revenue")) {
+                        logger.info("Found passenger revenue row in geographic table: {}", rowText);
                         // This is likely a column-based geographic table
                         // Find header row with region names and map to column indices
                         Map<String, Integer> regionColumnMap = findRegionColumns(table);
+                        logger.info("Region column map: {}", regionColumnMap);
 
                         if (!regionColumnMap.isEmpty()) {
                             Elements cells = row.select("td, th");
