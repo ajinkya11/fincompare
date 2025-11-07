@@ -110,6 +110,16 @@ public class ConsoleReportGenerator {
         printTableSection("INCOME STATEMENT");
         printDetailedMetricRow("Total Revenue", c1Years, c2Years,
             data -> formatLargeNumber(data.getIncomeStatement().getTotalRevenue()));
+        printDetailedMetricRow("  - Passenger Revenue", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getPassengerRevenue()));
+        printDetailedMetricRow("  - Cargo Revenue", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getCargoRevenue()));
+        printDetailedMetricRow("  - Other Revenue", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getOtherRevenue()));
+        printDetailedMetricRow("  - Domestic Revenue", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getDomesticRevenue()));
+        printDetailedMetricRow("  - International Revenue", c1Years, c2Years,
+            data -> formatLargeNumber(data.getIncomeStatement().getInternationalRevenue()));
         printDetailedMetricRow("Gross Profit", c1Years, c2Years,
             data -> formatLargeNumber(data.getIncomeStatement().getGrossProfit()));
         printDetailedMetricRow("Operating Expenses", c1Years, c2Years,
