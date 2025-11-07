@@ -201,16 +201,22 @@ public class OperationalMetricsParser {
                      tableText.contains("latin") || tableText.contains("international"));
 
                 if (isGeographicTable) {
-                    logger.info("Found potential geographic table");
+                    logger.info("===== Found potential geographic table =====");
+                    logger.info("Table preview (first 300 chars): {}",
+                        tableText.substring(0, Math.min(300, tableText.length())));
                 }
 
                 // Skip tables showing changes/deltas rather than absolute values
+                // These tables show percentage changes or dollar changes, not absolute revenue values
                 if (isGeographicTable && (tableText.contains("increase (decrease)") ||
                     tableText.contains("increase/(decrease)") ||
                     tableText.contains("change from") ||
                     tableText.contains("year-over-year") ||
-                    tableText.contains("yoy change"))) {
-                    logger.info("Skipping geographic table showing changes rather than absolute values");
+                    tableText.contains("yoy change") ||
+                    tableText.contains("% change") ||
+                    tableText.contains("percent change") ||
+                    (tableText.contains("%") && tableText.contains("change")))) {
+                    logger.info("===== Skipping geographic table - contains change/delta indicators =====");
                     continue;
                 }
 
