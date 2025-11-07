@@ -169,12 +169,13 @@ public class OperationalMetricsParser {
     }
 
     /**
-     * Extract revenue breakdowns from 10-K HTML (passenger, cargo, other)
+     * Extract revenue breakdowns from 10-K HTML (passenger, cargo, other, geographic)
      */
     public Map<String, BigDecimal> extractRevenueBreakdowns(String htmlContent, String fiscalYear) {
         logger.info("Extracting revenue breakdowns from 10-K HTML for fiscal year: {}", fiscalYear);
 
         Map<String, BigDecimal> revenueBreakdowns = new HashMap<>();
+        Map<String, BigDecimal> geographicRevenues = new HashMap<>();
 
         try {
             Document doc = Jsoup.parse(htmlContent);
@@ -193,6 +194,11 @@ public class OperationalMetricsParser {
                 if (tableText.contains("balance sheet") || tableText.contains("cash flow")) {
                     continue;
                 }
+
+                // Check if this is a geographic revenue table
+                boolean isGeographicTable = tableText.contains("domestic") &&
+                    (tableText.contains("atlantic") || tableText.contains("pacific") ||
+                     tableText.contains("latin") || tableText.contains("international"));
 
                 Elements rows = table.select("tr");
                 for (Element row : rows) {
@@ -232,20 +238,58 @@ public class OperationalMetricsParser {
                         }
                     }
 
-                    // Look for domestic revenue (various patterns)
-                    if ((rowText.contains("domestic") || rowText.contains("mainline domestic")) &&
+                    // In geographic tables, look for region-specific rows
+                    if (isGeographicTable) {
+                        // Check if row is labeled with a geographic region
+                        boolean isDomestic = rowText.matches("^\\s*domestic\\s.*") || rowText.matches(".*^domestic$.*");
+                        boolean isAtlantic = rowText.matches("^\\s*atlantic\\s.*") || rowText.contains("atlantic") && !rowText.contains("mid-atlantic");
+                        boolean isPacific = rowText.matches("^\\s*pacific\\s.*") || (rowText.contains("pacific") && !rowText.contains("asia pacific"));
+                        boolean isLatin = rowText.matches("^\\s*latin\\s.*") || rowText.contains("latin");
+                        boolean isInternational = rowText.matches("^\\s*international\\s.*");
+
+                        if (isDomestic || isAtlantic || isPacific || isLatin || isInternational) {
+                            // Extract revenue - looking for passenger revenue line
+                            if (rowText.contains("passenger revenue") || rowText.contains("revenue")) {
+                                BigDecimal geoRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
+                                if (geoRevenue != null && geoRevenue.compareTo(new BigDecimal("100")) > 0) {
+                                    if (isDomestic) {
+                                        geographicRevenues.put("domestic", geoRevenue);
+                                        logger.info("Found domestic passenger revenue: {} million", geoRevenue);
+                                    } else if (isAtlantic) {
+                                        BigDecimal existing = geographicRevenues.getOrDefault("international", BigDecimal.ZERO);
+                                        geographicRevenues.put("international", existing.add(geoRevenue));
+                                        logger.info("Found Atlantic revenue: {} million (adding to international)", geoRevenue);
+                                    } else if (isPacific) {
+                                        BigDecimal existing = geographicRevenues.getOrDefault("international", BigDecimal.ZERO);
+                                        geographicRevenues.put("international", existing.add(geoRevenue));
+                                        logger.info("Found Pacific revenue: {} million (adding to international)", geoRevenue);
+                                    } else if (isLatin) {
+                                        BigDecimal existing = geographicRevenues.getOrDefault("international", BigDecimal.ZERO);
+                                        geographicRevenues.put("international", existing.add(geoRevenue));
+                                        logger.info("Found Latin America revenue: {} million (adding to international)", geoRevenue);
+                                    } else if (isInternational) {
+                                        geographicRevenues.put("international", geoRevenue);
+                                        logger.info("Found international revenue: {} million", geoRevenue);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Look for domestic revenue (various patterns) - fallback for non-geographic tables
+                    if (!isGeographicTable && (rowText.contains("domestic") || rowText.contains("mainline domestic")) &&
                         !rowText.contains("per ") && !rowText.contains("yield") &&
                         !rowText.contains("asm") && !rowText.contains("rpm")) {
 
                         BigDecimal domesticRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
                         if (domesticRevenue != null && domesticRevenue.compareTo(new BigDecimal("100")) > 0) {
-                            revenueBreakdowns.put("domestic", domesticRevenue);
+                            geographicRevenues.put("domestic", domesticRevenue);
                             logger.info("Found domestic revenue: {} million", domesticRevenue);
                         }
                     }
 
-                    // Look for international revenue (various patterns including regional breakdowns)
-                    if ((rowText.contains("international") ||
+                    // Look for international revenue (various patterns) - fallback for non-geographic tables
+                    if (!isGeographicTable && (rowText.contains("international") ||
                          rowText.contains("atlantic") ||
                          rowText.contains("pacific") ||
                          rowText.contains("latin") ||
@@ -256,15 +300,20 @@ public class OperationalMetricsParser {
                         BigDecimal internationalRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
                         if (internationalRevenue != null && internationalRevenue.compareTo(new BigDecimal("100")) > 0) {
                             // If we already have international revenue, add to it (for airlines that break down by region)
-                            if (revenueBreakdowns.containsKey("international")) {
-                                BigDecimal existing = revenueBreakdowns.get("international");
+                            if (geographicRevenues.containsKey("international")) {
+                                BigDecimal existing = geographicRevenues.get("international");
                                 internationalRevenue = existing.add(internationalRevenue);
                             }
-                            revenueBreakdowns.put("international", internationalRevenue);
+                            geographicRevenues.put("international", internationalRevenue);
                             logger.info("Found international revenue: {} million (regional: {})", internationalRevenue, rowText.contains("atlantic") || rowText.contains("pacific") || rowText.contains("latin") || rowText.contains("caribbean"));
                         }
                     }
                 }
+            }
+
+            // Merge geographic revenues into main breakdown map
+            if (!geographicRevenues.isEmpty()) {
+                revenueBreakdowns.putAll(geographicRevenues);
             }
 
             logger.info("Revenue breakdown extraction complete. Found {} revenue categories", revenueBreakdowns.size());
