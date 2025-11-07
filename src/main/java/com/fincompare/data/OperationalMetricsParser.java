@@ -200,6 +200,16 @@ public class OperationalMetricsParser {
                     (tableText.contains("atlantic") || tableText.contains("pacific") ||
                      tableText.contains("latin") || tableText.contains("international"));
 
+                // Skip tables showing changes/deltas rather than absolute values
+                if (isGeographicTable && (tableText.contains("increase (decrease)") ||
+                    tableText.contains("increase/(decrease)") ||
+                    tableText.contains("change from") ||
+                    tableText.contains("year-over-year") ||
+                    tableText.contains("yoy change"))) {
+                    logger.debug("Skipping geographic table showing changes rather than absolute values");
+                    continue;
+                }
+
                 Elements rows = table.select("tr");
                 for (Element row : rows) {
                     String rowText = row.text().toLowerCase();
