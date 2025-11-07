@@ -232,25 +232,36 @@ public class OperationalMetricsParser {
                         }
                     }
 
-                    // Look for domestic revenue
-                    if ((rowText.contains("domestic") && rowText.contains("revenue")) &&
-                        !rowText.contains("per ") && !rowText.contains("yield")) {
+                    // Look for domestic revenue (various patterns)
+                    if ((rowText.contains("domestic") || rowText.contains("mainline domestic")) &&
+                        !rowText.contains("per ") && !rowText.contains("yield") &&
+                        !rowText.contains("asm") && !rowText.contains("rpm")) {
 
                         BigDecimal domesticRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
-                        if (domesticRevenue != null) {
+                        if (domesticRevenue != null && domesticRevenue.compareTo(new BigDecimal("100")) > 0) {
                             revenueBreakdowns.put("domestic", domesticRevenue);
                             logger.info("Found domestic revenue: {} million", domesticRevenue);
                         }
                     }
 
-                    // Look for international revenue
-                    if ((rowText.contains("international") && rowText.contains("revenue")) &&
-                        !rowText.contains("per ") && !rowText.contains("yield")) {
+                    // Look for international revenue (various patterns including regional breakdowns)
+                    if ((rowText.contains("international") ||
+                         rowText.contains("atlantic") ||
+                         rowText.contains("pacific") ||
+                         rowText.contains("latin") ||
+                         rowText.contains("caribbean")) &&
+                        !rowText.contains("per ") && !rowText.contains("yield") &&
+                        !rowText.contains("asm") && !rowText.contains("rpm")) {
 
                         BigDecimal internationalRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
-                        if (internationalRevenue != null) {
+                        if (internationalRevenue != null && internationalRevenue.compareTo(new BigDecimal("100")) > 0) {
+                            // If we already have international revenue, add to it (for airlines that break down by region)
+                            if (revenueBreakdowns.containsKey("international")) {
+                                BigDecimal existing = revenueBreakdowns.get("international");
+                                internationalRevenue = existing.add(internationalRevenue);
+                            }
                             revenueBreakdowns.put("international", internationalRevenue);
-                            logger.info("Found international revenue: {} million", internationalRevenue);
+                            logger.info("Found international revenue: {} million (regional: {})", internationalRevenue, rowText.contains("atlantic") || rowText.contains("pacific") || rowText.contains("latin") || rowText.contains("caribbean"));
                         }
                     }
                 }
