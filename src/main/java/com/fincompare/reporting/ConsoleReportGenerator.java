@@ -239,6 +239,10 @@ public class ConsoleReportGenerator {
             data -> formatCentsCompact(data.getOperationalData().getCasm()));
         printDetailedMetricRow("CASM-ex fuel (cents)", c1Years, c2Years,
             data -> formatCentsCompact(data.getOperationalData().getCasmEx()));
+        printDetailedMetricRow("Domestic Departures", c1Years, c2Years,
+            data -> formatLargeNumber(data.getOperationalData().getDomesticDepartures()));
+        printDetailedMetricRow("International Departures", c1Years, c2Years,
+            data -> formatLargeNumber(data.getOperationalData().getInternationalDepartures()));
 
         System.out.println();
     }
@@ -520,6 +524,10 @@ public class ConsoleReportGenerator {
                 data -> formatPercentCompact(data.getOperationalData().getBreakEvenLoadFactor()));
             printDetailedMetricRow("Passenger Yield (cents)", c1Years, c2Years,
                 data -> formatCentsCompact(data.getOperationalData().getPassengerYield()));
+            printDetailedMetricRow("Domestic Departures", c1Years, c2Years,
+                data -> formatLargeNumber(data.getOperationalData().getDomesticDepartures()));
+            printDetailedMetricRow("International Departures", c1Years, c2Years,
+                data -> formatLargeNumber(data.getOperationalData().getInternationalDepartures()));
         } else {
             // Single year view
             YearlyFinancialData c1Data = c1Years.isEmpty() ? null : c1Years.get(0);

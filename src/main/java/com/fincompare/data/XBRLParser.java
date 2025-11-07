@@ -18,6 +18,7 @@ public class XBRLParser {
     private final ObjectMapper objectMapper;
     private final SECEdgarClient secEdgarClient;
     private final OperationalMetricsParser operationalMetricsParser;
+    private final T100DataProvider t100DataProvider;
 
     // Common XBRL tags for financial data
     private static final Map<String, List<String>> XBRL_TAGS = new HashMap<>();
@@ -80,10 +81,12 @@ public class XBRLParser {
         ));
     }
 
-    public XBRLParser(SECEdgarClient secEdgarClient, OperationalMetricsParser operationalMetricsParser) {
+    public XBRLParser(SECEdgarClient secEdgarClient, OperationalMetricsParser operationalMetricsParser,
+                      T100DataProvider t100DataProvider) {
         this.objectMapper = new ObjectMapper();
         this.secEdgarClient = secEdgarClient;
         this.operationalMetricsParser = operationalMetricsParser;
+        this.t100DataProvider = t100DataProvider;
     }
 
     /**
@@ -138,6 +141,13 @@ public class XBRLParser {
             enrichWithOperationalMetrics(companyData, companyInfo.getCik(), fiscalYears);
         } catch (Exception e) {
             logger.warn("Could not enrich with operational metrics from 10-K filings: {}", e.getMessage());
+        }
+
+        // Enrich with BTS T-100 data (domestic/international departures)
+        try {
+            enrichWithT100Data(companyData, ticker);
+        } catch (Exception e) {
+            logger.warn("Could not enrich with BTS T-100 data: {}", e.getMessage());
         }
 
         logger.info("Successfully parsed financial data for {} years", fiscalYears.size());
@@ -269,6 +279,42 @@ public class XBRLParser {
 
         } catch (Exception e) {
             logger.error("Error enriching with operational metrics", e);
+        }
+    }
+
+    /**
+     * Enrich company data with BTS T-100 departure data (domestic and international)
+     */
+    private void enrichWithT100Data(CompanyFinancialData companyData, String ticker) {
+        logger.info("Enriching with BTS T-100 departure data for {}", ticker);
+
+        for (YearlyFinancialData yearlyData : companyData.getYearlyData()) {
+            String fiscalYear = yearlyData.getFiscalYear();
+            AirlineOperationalData operationalData = yearlyData.getOperationalData();
+
+            if (operationalData == null) {
+                operationalData = new AirlineOperationalData();
+                operationalData.setFiscalYear(fiscalYear);
+                yearlyData.setOperationalData(operationalData);
+            }
+
+            // Load domestic departures from T-100 data
+            BigDecimal domesticDepartures = t100DataProvider.getDomesticDepartures(ticker, fiscalYear);
+            if (domesticDepartures != null) {
+                operationalData.setDomesticDepartures(domesticDepartures);
+                logger.info("Set domestic departures for {} FY{}: {}", ticker, fiscalYear, domesticDepartures);
+            } else {
+                logger.debug("No T-100 domestic departure data available for {} FY{}", ticker, fiscalYear);
+            }
+
+            // Load international departures from T-100 data
+            BigDecimal internationalDepartures = t100DataProvider.getInternationalDepartures(ticker, fiscalYear);
+            if (internationalDepartures != null) {
+                operationalData.setInternationalDepartures(internationalDepartures);
+                logger.info("Set international departures for {} FY{}: {}", ticker, fiscalYear, internationalDepartures);
+            } else {
+                logger.debug("No T-100 international departure data available for {} FY{}", ticker, fiscalYear);
+            }
         }
     }
 

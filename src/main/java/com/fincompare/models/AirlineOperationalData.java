@@ -20,6 +20,8 @@ public class AirlineOperationalData {
     private Long passengersCarried;
     private BigDecimal averageStageLength; // miles
     private BigDecimal departuresPerformed;
+    private BigDecimal domesticDepartures; // From BTS T-100 Domestic data
+    private BigDecimal internationalDepartures; // From BTS T-100 International data
     private BigDecimal blockHours;
 
     // Load Factors
@@ -88,6 +90,16 @@ public class AirlineOperationalData {
     public BigDecimal getDeparturesPerformed() { return departuresPerformed; }
     public void setDeparturesPerformed(BigDecimal departuresPerformed) {
         this.departuresPerformed = departuresPerformed;
+    }
+
+    public BigDecimal getDomesticDepartures() { return domesticDepartures; }
+    public void setDomesticDepartures(BigDecimal domesticDepartures) {
+        this.domesticDepartures = domesticDepartures;
+    }
+
+    public BigDecimal getInternationalDepartures() { return internationalDepartures; }
+    public void setInternationalDepartures(BigDecimal internationalDepartures) {
+        this.internationalDepartures = internationalDepartures;
     }
 
     public BigDecimal getBlockHours() { return blockHours; }
