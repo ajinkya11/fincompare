@@ -244,6 +244,14 @@ public class XBRLParser {
                                             incomeStatement.setOtherRevenue(revenueBreakdowns.get("other"));
                                             logger.info("Set other revenue for FY{}: {}", filingYear, revenueBreakdowns.get("other"));
                                         }
+                                        if (revenueBreakdowns.containsKey("domestic")) {
+                                            incomeStatement.setDomesticRevenue(revenueBreakdowns.get("domestic"));
+                                            logger.info("Set domestic revenue for FY{}: {}", filingYear, revenueBreakdowns.get("domestic"));
+                                        }
+                                        if (revenueBreakdowns.containsKey("international")) {
+                                            incomeStatement.setInternationalRevenue(revenueBreakdowns.get("international"));
+                                            logger.info("Set international revenue for FY{}: {}", filingYear, revenueBreakdowns.get("international"));
+                                        }
                                     }
                                 }
 

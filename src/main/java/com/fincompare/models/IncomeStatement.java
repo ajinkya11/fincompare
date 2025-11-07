@@ -11,6 +11,10 @@ public class IncomeStatement {
     private BigDecimal cargoRevenue;
     private BigDecimal otherRevenue;
 
+    // Geographic revenue breakdown
+    private BigDecimal domesticRevenue;
+    private BigDecimal internationalRevenue;
+
     // Costs and Expenses
     private BigDecimal costOfRevenue;
     private BigDecimal operatingExpenses;
@@ -103,5 +107,13 @@ public class IncomeStatement {
     public Long getSharesOutstandingDiluted() { return sharesOutstandingDiluted; }
     public void setSharesOutstandingDiluted(Long sharesOutstandingDiluted) {
         this.sharesOutstandingDiluted = sharesOutstandingDiluted;
+    }
+
+    public BigDecimal getDomesticRevenue() { return domesticRevenue; }
+    public void setDomesticRevenue(BigDecimal domesticRevenue) { this.domesticRevenue = domesticRevenue; }
+
+    public BigDecimal getInternationalRevenue() { return internationalRevenue; }
+    public void setInternationalRevenue(BigDecimal internationalRevenue) {
+        this.internationalRevenue = internationalRevenue;
     }
 }

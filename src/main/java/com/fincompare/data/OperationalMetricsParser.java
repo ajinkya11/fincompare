@@ -231,6 +231,28 @@ public class OperationalMetricsParser {
                             logger.info("Found other revenue: {} million", otherRevenue);
                         }
                     }
+
+                    // Look for domestic revenue
+                    if ((rowText.contains("domestic") && rowText.contains("revenue")) &&
+                        !rowText.contains("per ") && !rowText.contains("yield")) {
+
+                        BigDecimal domesticRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
+                        if (domesticRevenue != null) {
+                            revenueBreakdowns.put("domestic", domesticRevenue);
+                            logger.info("Found domestic revenue: {} million", domesticRevenue);
+                        }
+                    }
+
+                    // Look for international revenue
+                    if ((rowText.contains("international") && rowText.contains("revenue")) &&
+                        !rowText.contains("per ") && !rowText.contains("yield")) {
+
+                        BigDecimal internationalRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
+                        if (internationalRevenue != null) {
+                            revenueBreakdowns.put("international", internationalRevenue);
+                            logger.info("Found international revenue: {} million", internationalRevenue);
+                        }
+                    }
                 }
             }
 
