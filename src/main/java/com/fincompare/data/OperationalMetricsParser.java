@@ -238,40 +238,43 @@ public class OperationalMetricsParser {
                         }
                     }
 
-                    // In geographic tables, look for region-specific rows
-                    if (isGeographicTable) {
-                        // Check if row is labeled with a geographic region
-                        boolean isDomestic = rowText.matches("^\\s*domestic\\s.*") || rowText.matches(".*^domestic$.*");
-                        boolean isAtlantic = rowText.matches("^\\s*atlantic\\s.*") || rowText.contains("atlantic") && !rowText.contains("mid-atlantic");
-                        boolean isPacific = rowText.matches("^\\s*pacific\\s.*") || (rowText.contains("pacific") && !rowText.contains("asia pacific"));
-                        boolean isLatin = rowText.matches("^\\s*latin\\s.*") || rowText.contains("latin");
-                        boolean isInternational = rowText.matches("^\\s*international\\s.*");
+                    // In geographic tables, extract region-based revenue
+                    if (isGeographicTable && rowText.contains("passenger revenue")) {
+                        // This is likely a column-based geographic table
+                        // Find header row with region names and map to column indices
+                        Map<String, Integer> regionColumnMap = findRegionColumns(table);
 
-                        if (isDomestic || isAtlantic || isPacific || isLatin || isInternational) {
-                            // Extract revenue - looking for passenger revenue line
-                            if (rowText.contains("passenger revenue") || rowText.contains("revenue")) {
-                                BigDecimal geoRevenue = extractRevenueValueFromRow(row, fiscalYear, table);
-                                if (geoRevenue != null && geoRevenue.compareTo(new BigDecimal("100")) > 0) {
-                                    if (isDomestic) {
-                                        geographicRevenues.put("domestic", geoRevenue);
-                                        logger.info("Found domestic passenger revenue: {} million", geoRevenue);
-                                    } else if (isAtlantic) {
-                                        BigDecimal existing = geographicRevenues.getOrDefault("international", BigDecimal.ZERO);
-                                        geographicRevenues.put("international", existing.add(geoRevenue));
-                                        logger.info("Found Atlantic revenue: {} million (adding to international)", geoRevenue);
-                                    } else if (isPacific) {
-                                        BigDecimal existing = geographicRevenues.getOrDefault("international", BigDecimal.ZERO);
-                                        geographicRevenues.put("international", existing.add(geoRevenue));
-                                        logger.info("Found Pacific revenue: {} million (adding to international)", geoRevenue);
-                                    } else if (isLatin) {
-                                        BigDecimal existing = geographicRevenues.getOrDefault("international", BigDecimal.ZERO);
-                                        geographicRevenues.put("international", existing.add(geoRevenue));
-                                        logger.info("Found Latin America revenue: {} million (adding to international)", geoRevenue);
-                                    } else if (isInternational) {
-                                        geographicRevenues.put("international", geoRevenue);
-                                        logger.info("Found international revenue: {} million", geoRevenue);
+                        if (!regionColumnMap.isEmpty()) {
+                            Elements cells = row.select("td, th");
+                            logger.info("Processing geographic revenue row with {} cells, {} regions mapped",
+                                cells.size(), regionColumnMap.size());
+
+                            // Extract domestic revenue
+                            if (regionColumnMap.containsKey("domestic")) {
+                                BigDecimal domesticRev = extractValueFromCell(cells, regionColumnMap.get("domestic"));
+                                if (domesticRev != null && domesticRev.compareTo(new BigDecimal("100")) > 0) {
+                                    geographicRevenues.put("domestic", domesticRev.multiply(new BigDecimal("1000000")));
+                                    logger.info("Found domestic passenger revenue: {} million", domesticRev);
+                                }
+                            }
+
+                            // Extract and aggregate international regions
+                            BigDecimal internationalTotal = BigDecimal.ZERO;
+                            for (String region : new String[]{"atlantic", "pacific", "latin", "international"}) {
+                                if (regionColumnMap.containsKey(region)) {
+                                    BigDecimal regionRev = extractValueFromCell(cells, regionColumnMap.get(region));
+                                    if (regionRev != null && regionRev.compareTo(new BigDecimal("10")) > 0) {
+                                        internationalTotal = internationalTotal.add(regionRev);
+                                        logger.info("Found {} revenue: {} million (adding to international)",
+                                            region, regionRev);
                                     }
                                 }
+                            }
+
+                            if (internationalTotal.compareTo(BigDecimal.ZERO) > 0) {
+                                geographicRevenues.put("international",
+                                    internationalTotal.multiply(new BigDecimal("1000000")));
+                                logger.info("Total international revenue: {} million", internationalTotal);
                             }
                         }
                     }
@@ -1110,5 +1113,68 @@ public class OperationalMetricsParser {
         } catch (Exception e) {
             logger.warn("Error extracting fleet information: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Find column indices for geographic regions in a table
+     * Returns a map of region name to column index
+     */
+    private Map<String, Integer> findRegionColumns(Element table) {
+        Map<String, Integer> regionColumns = new HashMap<>();
+
+        try {
+            // Look through first few rows for headers
+            Elements rows = table.select("tr");
+            for (int rowIdx = 0; rowIdx < Math.min(3, rows.size()); rowIdx++) {
+                Element row = rows.get(rowIdx);
+                Elements cells = row.select("th, td");
+
+                for (int colIdx = 0; colIdx < cells.size(); colIdx++) {
+                    String cellText = cells.get(colIdx).text().toLowerCase().trim();
+
+                    // Map region names to column indices
+                    if (cellText.contains("domestic") && !cellText.contains("international")) {
+                        regionColumns.put("domestic", colIdx);
+                        logger.debug("Found 'domestic' column at index {}", colIdx);
+                    } else if (cellText.contains("atlantic")) {
+                        regionColumns.put("atlantic", colIdx);
+                        logger.debug("Found 'atlantic' column at index {}", colIdx);
+                    } else if (cellText.contains("pacific")) {
+                        regionColumns.put("pacific", colIdx);
+                        logger.debug("Found 'pacific' column at index {}", colIdx);
+                    } else if (cellText.contains("latin")) {
+                        regionColumns.put("latin", colIdx);
+                        logger.debug("Found 'latin' column at index {}", colIdx);
+                    } else if (cellText.equals("international")) {
+                        regionColumns.put("international", colIdx);
+                        logger.debug("Found 'international' column at index {}", colIdx);
+                    }
+                }
+
+                // If we found regions in this row, stop searching
+                if (!regionColumns.isEmpty()) {
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error finding region columns: {}", e.getMessage());
+        }
+
+        return regionColumns;
+    }
+
+    /**
+     * Extract numeric value from a specific cell, handling various formats
+     */
+    private BigDecimal extractValueFromCell(Elements cells, int columnIndex) {
+        try {
+            if (columnIndex >= 0 && columnIndex < cells.size()) {
+                String cellText = cells.get(columnIndex).text();
+                return parseNumber(cellText);
+            }
+        } catch (Exception e) {
+            logger.debug("Error extracting value from cell at index {}: {}", columnIndex, e.getMessage());
+        }
+        return null;
     }
 }
